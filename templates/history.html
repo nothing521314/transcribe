@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Processing History - AI Subtitle Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#6366f1',
+                        secondary: '#ec4899',
+                    },
+                    animation: {
+                        'gradient-x': 'gradient-x 15s ease infinite',
+                    },
+                    keyframes: {
+                        'gradient-x': {
+                            '0%, 100%': {
+                                'background-size': '200% 200%',
+                                'background-position': 'left center'
+                            },
+                            '50%': {
+                                'background-size': '200% 200%',
+                                'background-position': 'right center'
+                            },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .gradient-bg {
+            background: linear-gradient(-45deg, #667eea, #764ba2, #f093fb, #f5576c);
+            background-size: 400% 400%;
+        }
+        
+        .glass-effect {
+            backdrop-filter: blur(20px);
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body class="min-h-screen gradient-bg animate-gradient-x text-white">
+    <!-- Header -->
+    <header class="container mx-auto px-4 py-8">
+        <nav class="flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="w-12 h-12 bg-gradient-to-r from-primary to-secondary rounded-xl flex items-center justify-center">
+                    <i class="fas fa-history text-2xl text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold">Processing History</h1>
+                    <p class="text-white/70 text-sm">View all completed subtitle generations</p>
+                </div>
+            </div>
+            <a href="/" class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
+                <i class="fas fa-arrow-left mr-2"></i>Back to Home
+            </a>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 pb-16">
+        <div class="max-w-6xl mx-auto">
+            {% if tasks %}
+                <div class="space-y-6">
+                    {% for task in tasks %}
+                        <div class="glass-effect rounded-2xl p-6 hover:bg-white/15 transition-all duration-300">
+                            <div class="flex flex-col md:flex-row md:items-center justify-between">
+                                <div class="flex-1 mb-4 md:mb-0">
+                                    <div class="flex items-center space-x-3 mb-2">
+                                        <div class="w-10 h-10 bg-green-500/20 rounded-full flex items-center justify-center">
+                                            <i class="fas fa-check text-green-400"></i>
+                                        </div>
+                                        <div>
+                                            <h3 class="text-lg font-semibold text-white">{{ task.filename }}</h3>
+                                            <p class="text-sm text-white/60">
+                                                Processed on {{ task.start_time.strftime('%B %d, %Y at %I:%M %p') }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="ml-13 space-y-2">
+                                        <div class="flex flex-wrap items-center gap-2 text-sm">
+                                            <span class="text-white/70">Languages:</span>
+                                            {% for lang in task.languages %}
+                                                <span class="px-2 py-1 bg-primary/20 text-primary border border-primary/30 rounded-md">
+                                                    {{ lang.title() }}
+                                                </span>
+                                            {% endfor %}
+                                        </div>
+                                        
+                                        <div class="text-sm text-white/60">
+                                            <i class="fas fa-closed-captioning mr-1"></i>
+                                            {{ task.segments_count }} subtitle segments generated
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="flex items-center space-x-3">
+                                    <a href="/progress/{{ task.task_id }}" 
+                                       class="px-4 py-2 bg-blue-500/20 text-blue-400 border border-blue-400/30 rounded-lg hover:bg-blue-500/30 transition-all duration-300">
+                                        <i class="fas fa-info-circle mr-2"></i>Details
+                                    </a>
+                                    <button onclick="downloadFiles('{{ task.task_id }}')" 
+                                            class="px-4 py-2 bg-primary/20 text-primary border border-primary/30 rounded-lg hover:bg-primary/30 transition-all duration-300">
+                                        <i class="fas fa-download mr-2"></i>Download All
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center py-16">
+                    <div class="w-24 h-24 mx-auto mb-6 bg-white/10 rounded-full flex items-center justify-center">
+                        <i class="fas fa-history text-4xl text-white/50"></i>
+                    </div>
+                    <h2 class="text-2xl font-bold mb-4">No History Yet</h2>
+                    <p class="text-white/60 mb-8 max-w-md mx-auto">
+                        Start processing your first video to see the history here.
+                    </p>
+                    <a href="/" class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-primary to-secondary rounded-xl text-white font-semibold hover:shadow-lg transform hover:scale-105 transition-all duration-300">
+                        <i class="fas fa-plus mr-2"></i>Process First Video
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </main>
+
+    <script>
+        function downloadFiles(taskId) {
+            // This would implement bulk download functionality
+            alert('Bulk download feature will be implemented here');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,221 @@
+services:
+  # Web Application Service
+  subtitle-webapp:
+    build:
+      context: .
+      dockerfile: Dockerfile.webapp
+    container_name: subtitle-webapp
+    ports:
+      - "5050:5050"
+    environment:
+      # API Configuration
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - WHISPER_MODEL_SIZE=${WHISPER_MODEL_SIZE:-base}
+      - SECRET_KEY=${SECRET_KEY:-change-this-secret-key}
+      
+      # Application Settings
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - DEBUG=${DEBUG:-false}
+      - PORT=5050
+      
+      # Processing Settings
+      - DEFAULT_LANGUAGES=${DEFAULT_LANGUAGES:-vietnamese,chinese,korean,french}
+      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-500MB}
+      - CACHE_EXPIRE_HOURS=${CACHE_EXPIRE_HOURS:-24}
+      
+      # Timezone
+      - TZ=Asia/Ho_Chi_Minh
+    volumes:
+      # Application directories
+      - ./uploads:/app/uploads:rw
+      - ./output:/app/output:rw
+      - ./cache:/app/cache:rw
+      - ./temp:/app/temp:rw
+      - ./logs:/app/logs:rw
+      
+      # Static files
+      - ./static:/app/static:ro
+      - ./templates:/app/templates:ro
+      
+      # Whisper model cache
+      - whisper-models:/home/appuser/.cache/whisper
+    networks:
+      - webapp-network
+    restart: unless-stopped
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5050/api/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '4.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+
+  # Redis for caching and session management
+  redis:
+    image: redis:7-alpine
+    container_name: subtitle-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - webapp-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru
+    
+  # PostgreSQL for persistent data storage
+  postgres:
+    image: postgres:15-alpine
+    container_name: subtitle-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-subtitle_db}
+      POSTGRES_USER: ${POSTGRES_USER:-subtitle_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secure_password}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - webapp-network
+    restart: unless-stopped
+    profiles:
+      - database
+
+  # Nginx reverse proxy and static file serving
+  nginx:
+    image: nginx:alpine
+    container_name: subtitle-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/sites-available:/etc/nginx/sites-available:ro
+      - ./output:/usr/share/nginx/html/downloads:ro
+      - ./static:/usr/share/nginx/html/static:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    networks:
+      - webapp-network
+    restart: unless-stopped
+    depends_on:
+      - subtitle-webapp
+    profiles:
+      - proxy
+
+  # File manager service (optional)
+  filebrowser:
+    image: filebrowser/filebrowser:latest
+    container_name: subtitle-filebrowser
+    ports:
+      - "8080:80"
+    volumes:
+      - ./uploads:/srv/uploads
+      - ./output:/srv/output
+      - ./cache:/srv/cache
+      - ./filebrowser.db:/database/filebrowser.db
+      - ./filebrowser.json:/config/settings.json
+    environment:
+      - FB_DATABASE=/database/filebrowser.db
+      - FB_CONFIG=/config/settings.json
+    networks:
+      - webapp-network
+    restart: unless-stopped
+    profiles:
+      - management
+
+  # Monitoring with Prometheus (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: subtitle-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - webapp-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # Grafana for visualization (optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: subtitle-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana:/etc/grafana/provisioning:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+    networks:
+      - webapp-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # Worker service for background processing (optional)
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: subtitle-worker
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - WHISPER_MODEL_SIZE=${WHISPER_MODEL_SIZE:-base}
+      - REDIS_URL=redis://redis:6379
+      - WORKER_CONCURRENCY=${WORKER_CONCURRENCY:-2}
+    volumes:
+      - ./uploads:/app/uploads:rw
+      - ./output:/app/output:rw
+      - ./cache:/app/cache:rw
+      - ./temp:/app/temp:rw
+      - whisper-models:/home/appuser/.cache/whisper
+    networks:
+      - webapp-network
+    restart: unless-stopped
+    depends_on:
+      - redis
+    profiles:
+      - worker
+
+# Networks
+networks:
+  webapp-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.21.0.0/16
+
+# Volumes
+volumes:
+  whisper-models:
+    driver: local
+  redis-data:
+    driver: local
+  postgres-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local

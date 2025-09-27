@@ -1,0 +1,36 @@
+FROM python:3.11-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    curl \
+    bc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+RUN pip install --no-cache-dir \
+    flask \
+    gunicorn \
+    openai-whisper \
+    pysrt \
+    requests \
+    python-dotenv \
+    tqdm \
+    numpy
+
+# Create user and directories
+RUN useradd -r -s /bin/bash appuser && \
+    mkdir -p /app /home/appuser/.cache/whisper && \
+    chown -R appuser:appuser /app /home/appuser
+
+WORKDIR /app
+USER appuser
+
+# Simple test app
+RUN echo 'from flask import Flask; app = Flask(__name__); @app.route("/") \
+def hello(): return "Hello World!"; @app.route("/api/stats") \
+def stats(): return {"status": "ok"}; \
+if __name__ == "__main__": app.run(host="0.0.0.0", port=5000)' > test_app.py
+
+EXPOSE 5000
+CMD ["python", "test_app.py"]

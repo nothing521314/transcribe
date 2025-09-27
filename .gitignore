@@ -1,0 +1,6 @@
+cache/*
+
+uploads/*
+output/*
+
+.env

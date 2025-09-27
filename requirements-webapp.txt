@@ -1,0 +1,61 @@
+# Core AI/ML dependencies
+openai-whisper==20231117
+google-generativeai==0.3.2
+
+# Web framework
+Flask==2.3.3
+Werkzeug==2.3.7
+
+# Subtitle processing
+pysrt==1.1.2
+
+# Translation fallback
+googletrans==3.1.0a0
+
+# Audio/Video processing
+ffmpeg-python==0.2.0
+
+# YouTube and video downloading
+yt-dlp==2025.9.26
+
+# HTTP requests
+requests==2.31.0
+
+# Configuration
+python-dotenv==1.0.0
+
+# Progress tracking and utilities
+tqdm==4.66.1
+numpy==1.24.3
+
+# Logging
+loguru==0.7.2
+
+# File handling and validation
+Pillow==10.1.0
+python-magic==0.4.27
+
+# Async support
+gevent==23.9.1
+
+# Cache and session management
+Flask-Caching==2.1.0
+redis==5.0.1
+
+# Database (optional)
+Flask-SQLAlchemy==3.1.1
+psycopg2-binary==2.9.9
+
+# Security
+Flask-WTF==1.2.1
+Flask-Limiter==3.5.0
+
+# API and utilities
+marshmallow==3.20.1
+python-dateutil==2.8.2
+
+# Monitoring (optional)
+prometheus-flask-exporter==0.23.0
+
+# Development utilities
+python-multipart==0.0.6
