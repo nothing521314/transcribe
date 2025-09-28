@@ -1,615 +1,1663 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Video Subtitle Generator</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#6366f1',
-                        secondary: '#ec4899',
-                    },
-                    animation: {
-                        'gradient-x': 'gradient-x 15s ease infinite',
-                        'float': 'float 6s ease-in-out infinite',
-                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                    },
-                    keyframes: {
-                        'gradient-x': {
-                            '0%, 100%': {
-                                'background-size': '200% 200%',
-                                'background-position': 'left center'
-                            },
-                            '50%': {
-                                'background-size': '200% 200%',
-                                'background-position': 'right center'
-                            },
-                        },
-                        float: {
-                            '0%, 100%': { transform: 'translateY(0px)' },
-                            '50%': { transform: 'translateY(-20px)' },
-                        }
-                    }
-                }
-            }
-        }
-    </script>
-    <style>
-        .gradient-bg {
-            background: linear-gradient(-45deg, #667eea, #764ba2, #f093fb, #f5576c);
-            background-size: 400% 400%;
-        }
-        
-        .glass-effect {
-            backdrop-filter: blur(20px);
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-        
-        .neon-glow {
-            box-shadow: 0 0 5px theme('colors.primary'), 0 0 20px theme('colors.primary'), 0 0 35px theme('colors.primary');
-        }
-        
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 8px;
-        }
-        
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 10px;
-        }
-        
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #6366f1;
-            border-radius: 10px;
-        }
-        
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: #4f46e5;
-        }
-    </style>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>AI Video Subtitle Generator</title>
+	<script src="https://cdn.tailwindcss.com"></script>
+	<script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+	<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
+	<script>
+		tailwind.config = {
+			theme: {
+				extend: {
+					colors: {
+						primary: '#6366f1',
+						secondary: '#ec4899',
+					},
+					animation: {
+						'gradient-x': 'gradient-x 15s ease infinite',
+						'float': 'float 6s ease-in-out infinite',
+						'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+					},
+					keyframes: {
+						'gradient-x': {
+							'0%, 100%': {
+								'background-size': '200% 200%',
+								'background-position': 'left center'
+							},
+							'50%': {
+								'background-size': '200% 200%',
+								'background-position': 'right center'
+							},
+						},
+						float: {
+							'0%, 100%': { transform: 'translateY(0px)' },
+							'50%': { transform: 'translateY(-20px)' },
+						}
+					}
+				}
+			}
+		}
+	</script>
+	<style>
+		.gradient-bg {
+			background: linear-gradient(-45deg, #667eea, #764ba2, #f093fb, #f5576c);
+			background-size: 400% 400%;
+			animation: gradient 15s ease infinite;
+		}
+
+		@keyframes gradient {
+
+			0%,
+			100% {
+				background-position: 0% 50%;
+			}
+
+			50% {
+				background-position: 100% 50%;
+			}
+		}
+
+		.glass-effect {
+			backdrop-filter: blur(10px);
+			background: rgba(255, 255, 255, 0.1);
+			border: 1px solid rgba(255, 255, 255, 0.2);
+		}
+
+		.neon-glow {
+			box-shadow: 0 0 5px theme('colors.primary'), 0 0 20px theme('colors.primary'), 0 0 35px theme('colors.primary');
+		}
+
+		.custom-scrollbar::-webkit-scrollbar {
+			width: 8px;
+		}
+
+		.custom-scrollbar::-webkit-scrollbar-track {
+			background: #f1f1f1;
+			border-radius: 10px;
+		}
+
+		.custom-scrollbar::-webkit-scrollbar-thumb {
+			background: #6366f1;
+			border-radius: 10px;
+		}
+
+		.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+			background: #4f46e5;
+		}
+
+		/* Fix for loading issues */
+		[x-cloak] {
+			display: none !important;
+		}
+
+		/* Better button styles */
+		.btn-primary {
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			transition: all 0.3s ease;
+		}
+
+		.btn-primary:hover {
+			transform: translateY(-2px);
+			box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+		}
+
+		.btn-primary:disabled {
+			opacity: 0.6;
+			transform: none;
+			cursor: not-allowed;
+		}
+	</style>
 </head>
-<body class="min-h-screen gradient-bg animate-gradient-x text-white overflow-x-hidden">
-    <!-- Background decorations -->
-    <div class="fixed inset-0 overflow-hidden pointer-events-none">
-        <div class="absolute top-20 left-20 w-72 h-72 bg-white/10 rounded-full blur-3xl animate-float"></div>
-        <div class="absolute top-40 right-32 w-96 h-96 bg-purple-400/20 rounded-full blur-3xl animate-float" style="animation-delay: -2s;"></div>
-        <div class="absolute bottom-32 left-1/3 w-80 h-80 bg-pink-400/20 rounded-full blur-3xl animate-float" style="animation-delay: -4s;"></div>
-    </div>
 
-    <div x-data="subtitleApp()" class="relative z-10">
-        <!-- Header -->
-        <header class="container mx-auto px-4 py-8">
-            <nav class="flex justify-between items-center">
-                <div class="flex items-center space-x-3">
-                    <div class="w-12 h-12 bg-gradient-to-r from-primary to-secondary rounded-xl flex items-center justify-center neon-glow">
-                        <i class="fas fa-video text-2xl text-white"></i>
-                    </div>
-                    <div>
-                        <h1 class="text-2xl font-bold">AI Subtitle Generator</h1>
-                        <p class="text-white/70 text-sm">Powered by Whisper & Gemini AI</p>
-                    </div>
-                </div>
-                <div class="flex space-x-4">
-                    <a href="/history" class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
-                        <i class="fas fa-history mr-2"></i>History
-                    </a>
-                    <button @click="clearCache()" class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
-                        <i class="fas fa-trash mr-2"></i>Clear Cache
-                    </button>
-                </div>
-            </nav>
-        </header>
+<body class="min-h-screen gradient-bg text-white">
+	<div x-data="subtitleApp()" x-init="init()" x-cloak class="container mx-auto px-4 py-8">
+		<!-- Header -->
+		<header class="text-center mb-12">
+			<h1 class="text-5xl font-bold mb-4">🎬 AI Subtitle Generator</h1>
+			<p class="text-xl opacity-90">
+				Enhanced with WebSocket & Multi-API support
+			</p>
+			<div class="mt-4">
+				<span class="text-sm">Status: </span>
+				<span :class="connectionStatus === 'connected' ? 'text-green-400' : 'text-red-400'" x-text="connectionStatus"
+					class="font-semibold"></span>
+			</div>
+		</header>
+		<div class="mb-2 flex justify-end space-x-4">
+			<a href="/history" class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
+				<i class="fas fa-history mr-2"></i>History
+			</a>
+			<button @click="clearCache()"
+				class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
+				<i class="fas fa-trash mr-2"></i>Clear Cache
+			</button>
+		</div>
 
-        <!-- Main Content -->
-        <main class="container mx-auto px-4 pb-16">
-            <!-- Hero Section -->
-            <div class="text-center mb-16">
-                <h2 class="text-6xl font-bold mb-6 bg-gradient-to-r from-white via-purple-200 to-pink-200 bg-clip-text text-transparent animate-pulse-slow">
-                    Generate Multilingual Subtitles
-                </h2>
-                <p class="text-xl text-white/80 max-w-3xl mx-auto leading-relaxed">
-                    Transform your videos with AI-powered transcription and translation. Support 30+ languages with intelligent caching system.
-                </p>
-            </div>
+		<!-- API Keys Section -->
+		<div class="glass-effect rounded-xl p-6 mb-8">
+			<h2 class="text-2xl font-bold mb-4">
+				<i class="fas fa-key text-yellow-400 mr-2"></i>
+				Gemini API Keys
+			</h2>
 
-            <!-- Upload Section -->
-            <div class="max-w-4xl mx-auto">
-                <div class="glass-effect rounded-3xl p-8 shadow-2xl">
-                    <div class="grid md:grid-cols-2 gap-8">
-                        <!-- File Upload -->
-                        <div class="space-y-6">
-                            <h3 class="text-2xl font-semibold flex items-center">
-                                <i class="fas fa-cloud-upload-alt mr-3 text-primary"></i>
-                                Upload Video
-                            </h3>
-                            
-                            <div class="border-2 border-dashed border-white/30 rounded-2xl p-8 text-center hover:border-primary/50 transition-all duration-300 cursor-pointer"
-                                 @click="$refs.fileInput.click()"
-                                 @dragover.prevent="dragOver = true"
-                                 @dragleave.prevent="dragOver = false"
-                                 @drop.prevent="handleFileDrop($event)"
-                                 :class="{'border-primary/70 bg-primary/10': dragOver}">
-                                
-                                <input type="file" x-ref="fileInput" @change="handleFileSelect($event)" 
-                                       accept="video/*,audio/*" class="hidden">
-                                
-                                <div x-show="!selectedFile" class="space-y-4">
-                                    <i class="fas fa-file-video text-6xl text-white/50"></i>
-                                    <div>
-                                        <p class="text-lg font-medium">Drop your video here</p>
-                                        <p class="text-white/60">or click to browse</p>
-                                        <p class="text-sm text-white/40 mt-2">
-                                            Support: MP4, AVI, MOV, MKV, MP3, WAV, etc.
-                                        </p>
-                                    </div>
-                                </div>
-                                
-                                <div x-show="selectedFile" class="space-y-3">
-                                    <i class="fas fa-check-circle text-4xl text-green-400"></i>
-                                    <p class="text-lg font-medium" x-text="selectedFile?.name"></p>
-                                    <p class="text-white/60" x-text="formatFileSize(selectedFile?.size)"></p>
-                                    <button @click.stop="selectedFile = null" 
-                                            class="text-red-400 hover:text-red-300 transition-colors">
-                                        <i class="fas fa-times-circle mr-1"></i>Remove
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+			<div class="grid md:grid-cols-3 gap-4 mb-4">
+				<div class="md:col-span-2">
+					<textarea x-model="newApiKey" placeholder="Paste your Gemini API keys here (one per line)..."
+						class="w-full h-24 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 resize-none focus:border-yellow-400 focus:outline-none"
+						@keydown.ctrl.enter="addApiKeys()"></textarea>
+				</div>
+				<div class="space-y-2">
+					<button @click="addApiKeys()" :disabled="!newApiKey.trim()"
+						class="w-full px-4 py-2 bg-yellow-500/20 border border-yellow-400/30 rounded-lg hover:bg-yellow-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+						<i class="fas fa-plus mr-2"></i>Add Keys
+					</button>
+					<button @click="validateKeys()" :disabled="apiKeys.length === 0"
+						class="w-full px-4 py-2 bg-green-500/20 border border-green-400/30 rounded-lg hover:bg-green-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+						<i class="fas fa-check mr-2"></i>Validate
+					</button>
+					<button @click="clearApiKeys()" :disabled="apiKeys.length === 0"
+						class="w-full px-4 py-2 bg-red-500/20 border border-red-400/30 rounded-lg hover:bg-red-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+						<i class="fas fa-trash mr-2"></i>Clear
+					</button>
+				</div>
+			</div>
 
-                        <!-- URL Input -->
-                        <div class="space-y-6">
-                            <h3 class="text-2xl font-semibold flex items-center">
-                                <i class="fas fa-link mr-3 text-secondary"></i>
-                                Video URL
-                            </h3>
-                            
-                            <div class="space-y-4">
-                                <div class="relative">
-                                    <input type="url" x-model="videoUrl" placeholder="https://youtube.com/watch?v=..." 
-                                           class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/50 focus:outline-none transition-all duration-300 text-white placeholder-white/50">
-                                    <div class="absolute inset-y-0 right-0 flex items-center pr-3">
-                                        <i class="fas fa-globe text-white/50"></i>
-                                    </div>
-                                </div>
-                                
-                                <div class="bg-blue-500/20 border border-blue-400/30 rounded-lg p-4">
-                                    <p class="text-sm text-blue-200 flex items-start">
-                                        <i class="fas fa-info-circle mr-2 mt-0.5"></i>
-                                        Support YouTube, Vimeo, and many other platforms. The video will be downloaded automatically.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+			<!-- API Keys List -->
+			<div x-show="apiKeys.length > 0" class="mt-4">
+				<div class="flex justify-between items-center mb-3">
+					<h3 class="font-medium">
+						Active API Keys (<span x-text="apiKeys.length"></span>)
+					</h3>
+					<div class="text-sm opacity-75">
+						<span class="text-green-400" x-text="validatedKeys.valid || 0"></span>
+						valid •
+						<span class="text-red-400" x-text="validatedKeys.invalid || 0"></span>
+						invalid
+					</div>
+				</div>
 
-                <!-- Language Selection -->
-                <div class="glass-effect rounded-3xl p-8 mt-8 shadow-2xl">
-                    <h3 class="text-2xl font-semibold mb-6 flex items-center">
-                        <i class="fas fa-language mr-3 text-green-400"></i>
-                        Target Languages
-                    </h3>
-                    
-                    <div class="mb-6 flex flex-wrap gap-3">
-                        <button @click="selectAll()" 
-                                class="px-4 py-2 bg-primary/20 border border-primary/30 rounded-lg hover:bg-primary/30 transition-all duration-300">
-                            <i class="fas fa-check-double mr-2"></i>Select All
-                        </button>
-                        <button @click="selectNone()" 
-                                class="px-4 py-2 bg-red-500/20 border border-red-400/30 rounded-lg hover:bg-red-500/30 transition-all duration-300">
-                            <i class="fas fa-times mr-2"></i>Select None
-                        </button>
-                        <button @click="selectPopular()" 
-                                class="px-4 py-2 bg-yellow-500/20 border border-yellow-400/30 rounded-lg hover:bg-yellow-500/30 transition-all duration-300">
-                            <i class="fas fa-star mr-2"></i>Popular Languages
-                        </button>
-                    </div>
-                    
-                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 max-h-80 overflow-y-auto custom-scrollbar">
-                        <template x-for="[key, lang] in Object.entries(languages)" :key="key">
-                            <label class="flex items-center p-3 bg-white/5 rounded-xl hover:bg-white/10 cursor-pointer transition-all duration-300 group"
-                                   :class="{'bg-primary/20 border border-primary/50': selectedLanguages.includes(key)}">
-                                <input type="checkbox" :value="key" x-model="selectedLanguages" class="sr-only">
-                                <div class="flex items-center space-x-3 w-full">
-                                    <span class="text-2xl" x-text="lang.flag"></span>
-                                    <div class="min-w-0 flex-1">
-                                        <p class="text-sm font-medium truncate" x-text="lang.native"></p>
-                                        <p class="text-xs text-white/60 truncate" x-text="lang.name"></p>
-                                    </div>
-                                    <div class="w-4 h-4 border-2 border-white/30 rounded group-hover:border-primary/70 transition-colors"
-                                         :class="{'bg-primary border-primary': selectedLanguages.includes(key)}">
-                                        <i x-show="selectedLanguages.includes(key)" class="fas fa-check text-white text-xs flex items-center justify-center h-full"></i>
-                                    </div>
-                                </div>
-                            </label>
-                        </template>
-                    </div>
-                    
-                    <div class="mt-4 text-sm text-white/60">
-                        Selected: <span x-text="selectedLanguages.length" class="font-medium text-primary"></span> languages
-                    </div>
-                </div>
+				<div class="space-y-2 max-h-32 overflow-y-auto">
+					<template x-for="(key, index) in apiKeys" :key="index">
+						<div class="flex items-center justify-between p-2 bg-white/5 rounded-lg">
+							<div class="flex items-center space-x-2">
+								<span class="w-6 h-6 bg-yellow-500/20 rounded-full flex items-center justify-center text-xs"
+									x-text="index + 1"></span>
+								<span class="font-mono text-sm" x-text="`...${key.slice(-12)}`"></span>
+								<div x-show="validationResults[key]"
+									:class="validationResults[key] === 'valid' ? 'text-green-400' : 'text-red-400'">
+									<i
+										:class="validationResults[key] === 'valid' ? 'fas fa-check-circle' : 'fas fa-exclamation-circle'"></i>
+								</div>
+							</div>
+							<button @click="removeApiKey(index)" class="text-red-400 hover:text-red-300">
+								<i class="fas fa-times"></i>
+							</button>
+						</div>
+					</template>
+				</div>
+			</div>
+		</div>
 
-                <!-- Advanced Options -->
-                <div class="glass-effect rounded-3xl p-8 mt-8 shadow-2xl">
-                    <div class="flex items-center justify-between mb-6">
-                        <h3 class="text-2xl font-semibold flex items-center">
-                            <i class="fas fa-cog mr-3 text-purple-400"></i>
-                            Advanced Options
-                        </h3>
-                        <button @click="showAdvanced = !showAdvanced" 
-                                class="text-purple-400 hover:text-purple-300 transition-colors">
-                            <i :class="showAdvanced ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
-                        </button>
-                    </div>
-                    
-                    <div x-show="showAdvanced" x-collapse class="space-y-6">
-                        <div class="grid md:grid-cols-2 gap-6">
-                            <div>
-                                <label class="block text-sm font-medium mb-2">Whisper Model Size</label>
-                                <select x-model="options.modelSize" 
-                                        class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/50 focus:outline-none text-white">
-                                    <option value="tiny" class="bg-gray-800">Tiny (fastest, lower quality)</option>
-                                    <option value="base" class="bg-gray-800">Base (recommended)</option>
-                                    <option value="small" class="bg-gray-800">Small (better quality)</option>
-                                    <option value="medium" class="bg-gray-800">Medium (high quality)</option>
-                                    <option value="large" class="bg-gray-800">Large (best quality, slowest)</option>
-                                </select>
-                            </div>
-                            
-                            <div>
-                                <label class="block text-sm font-medium mb-2">Max Characters per Line</label>
-                                <input type="number" x-model="options.maxChars" min="20" max="100" 
-                                       class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/50 focus:outline-none text-white">
-                            </div>
-                            
-                            <div>
-                                <label class="block text-sm font-medium mb-2">Max Subtitle Duration (seconds)</label>
-                                <input type="number" x-model="options.maxDuration" min="1" max="10" step="0.5" 
-                                       class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl focus:border-primary focus:ring-2 focus:ring-primary/50 focus:outline-none text-white">
-                            </div>
-                        </div>
-                    </div>
-                </div>
+		<!-- Upload Section -->
+		<div class="glass-effect rounded-xl p-6 mb-8">
+			<div class="grid md:grid-cols-2 gap-6">
+				<!-- File Upload -->
+				<div>
+					<h3 class="text-xl font-bold mb-4">
+						<i class="fas fa-upload text-blue-400 mr-2"></i>Upload Video
+					</h3>
+					<div
+						class="border-2 border-dashed border-white/30 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400/50 transition-colors"
+						@click="$refs.fileInput.click()" @drop.prevent="handleFileDrop($event)" @dragover.prevent="dragOver = true"
+						@dragleave.prevent="dragOver = false" :class="{'border-blue-400/70 bg-blue-400/10': dragOver}">
+						<input type="file" x-ref="fileInput" @change="handleFileSelect($event)" accept="video/*,audio/*"
+							class="hidden" />
 
-                <!-- Submit Button -->
-                <div class="mt-8 text-center">
-                    <button @click="submitForm()" 
-                            :disabled="processing || (!selectedFile && !videoUrl) || selectedLanguages.length === 0"
-                            class="inline-flex items-center px-12 py-4 bg-gradient-to-r from-primary to-secondary rounded-2xl text-white font-semibold text-lg shadow-2xl hover:shadow-primary/25 transform hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none neon-glow">
-                        <template x-if="!processing">
-                            <span class="flex items-center">
-                                <i class="fas fa-magic mr-3"></i>
-                                Generate Subtitles
-                            </span>
-                        </template>
-                        <template x-if="processing">
-                            <span class="flex items-center">
-                                <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                Processing...
-                            </span>
-                        </template>
-                    </button>
-                </div>
-            </div>
+						<div x-show="!selectedFile">
+							<i class="fas fa-cloud-upload-alt text-4xl text-white/50 mb-4"></i>
+							<p class="font-medium">Drop video here or click to browse</p>
+							<p class="text-sm text-white/60 mt-2">
+								MP4, AVI, MOV, MKV, MP3, WAV supported
+							</p>
+						</div>
 
-            <!-- Progress Modal -->
-            <div x-show="processing" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" 
-                 x-transition:enter="transition ease-out duration-300" 
-                 x-transition:enter-start="opacity-0" 
-                 x-transition:enter-end="opacity-100">
-                
-                <div class="glass-effect rounded-3xl p-8 max-w-2xl w-full mx-4 shadow-2xl">
-                    <div class="text-center">
-                        <div class="w-20 h-20 mx-auto mb-6 bg-gradient-to-r from-primary to-secondary rounded-full flex items-center justify-center animate-pulse">
-                            <i class="fas fa-cogs text-3xl text-white"></i>
-                        </div>
-                        
-                        <h3 class="text-2xl font-bold mb-2">Processing Your Video</h3>
-                        <p class="text-white/70 mb-6" x-text="progressMessage"></p>
-                        
-                        <!-- Progress Bar -->
-                        <div class="w-full bg-white/20 rounded-full h-3 mb-4 overflow-hidden">
-                            <div class="h-full bg-gradient-to-r from-primary to-secondary transition-all duration-500 ease-out rounded-full"
-                                 :style="`width: ${progress}%`"></div>
-                        </div>
-                        
-                        <div class="flex justify-between text-sm text-white/60 mb-6">
-                            <span x-text="`${progress}% Complete`"></span>
-                            <span x-text="formatTime(elapsedTime)"></span>
-                        </div>
-                        
-                        <!-- Processing Steps -->
-                        <div class="space-y-2 text-left max-h-32 overflow-y-auto custom-scrollbar">
-                            <template x-for="step in processingSteps" :key="step.id">
-                                <div class="flex items-center p-2 rounded-lg" 
-                                     :class="step.status === 'completed' ? 'bg-green-500/20' : step.status === 'processing' ? 'bg-primary/20' : 'bg-white/10'">
-                                    <i :class="step.status === 'completed' ? 'fas fa-check text-green-400' : step.status === 'processing' ? 'fas fa-spinner fa-spin text-primary' : 'far fa-circle text-white/50'" 
-                                       class="mr-3"></i>
-                                    <span x-text="step.name" :class="step.status === 'completed' ? 'text-green-300' : 'text-white'"></span>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-                </div>
-            </div>
+						<div x-show="selectedFile" x-cloak>
+							<i class="fas fa-file-video text-4xl text-green-400 mb-4"></i>
+							<p class="font-medium" x-text="selectedFile?.name"></p>
+							<p class="text-sm text-white/60" x-text="formatFileSize(selectedFile?.size)"></p>
+							<button @click.stop="selectedFile = null" class="mt-2 text-red-400 hover:text-red-300">
+								<i class="fas fa-times mr-1"></i>Remove
+							</button>
+						</div>
+					</div>
+				</div>
 
-            <!-- Results Modal -->
-            <div x-show="results" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" 
-                 x-transition:enter="transition ease-out duration-300" 
-                 x-transition:enter-start="opacity-0" 
-                 x-transition:enter-end="opacity-100">
-                
-                <div class="glass-effect rounded-3xl p-8 max-w-4xl w-full mx-4 shadow-2xl max-h-[80vh] overflow-y-auto custom-scrollbar">
-                    <div class="text-center mb-8">
-                        <div class="w-20 h-20 mx-auto mb-6 bg-green-500 rounded-full flex items-center justify-center">
-                            <i class="fas fa-check text-3xl text-white"></i>
-                        </div>
-                        <h3 class="text-3xl font-bold mb-2">Subtitles Generated Successfully!</h3>
-                        <p class="text-white/70" x-text="`${results?.segments_count || 0} subtitle segments created for "${results?.original_filename}"`"></p>
-                    </div>
-                    
-                    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-                        <template x-for="file in results?.files || []" :key="file.filename">
-                            <div class="bg-white/10 rounded-xl p-4 hover:bg-white/20 transition-all duration-300 group">
-                                <div class="flex items-center justify-between mb-3">
-                                    <div class="flex items-center space-x-3">
-                                        <span class="text-2xl" x-text="file.flag || '🌍'"></span>
-                                        <div class="w-[calc(100%-40px)]">
-                                            <p class="font-medium" x-text="file.name"></p>
-                                            <p class="text-xs text-white/60 overflow-hidden text-ellipsis whitespace-nowrap" x-text="file.filename"></p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <a :href="`/download/${file.filename}`" 
-                                   class="w-full bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 px-4 py-2 rounded-lg transition-all duration-300 inline-flex items-center justify-center group-hover:scale-105">
-                                    <i class="fas fa-download mr-2"></i>Download
-                                </a>
-                            </div>
-                        </template>
-                    </div>
-                    
-                    <div class="flex justify-center space-x-4">
-                        <button @click="results = null; processing = false; progress = 0; selectedFile = null; videoUrl = ''" 
-                                class="px-6 py-3 bg-primary text-white rounded-xl hover:bg-primary/80 transition-all duration-300">
-                            <i class="fas fa-plus mr-2"></i>Process Another Video
-                        </button>
-                        <a href="/history" 
-                           class="px-6 py-3 bg-secondary text-white rounded-xl hover:bg-secondary/80 transition-all duration-300">
-                            <i class="fas fa-history mr-2"></i>View History
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </main>
-    </div>
+				<!-- URL Input -->
+				<div>
+					<h3 class="text-xl font-bold mb-4">
+						<i class="fas fa-link text-purple-400 mr-2"></i>Video URL
+					</h3>
+					<div class="space-y-4">
+						<input type="url" x-model="videoUrl" placeholder="https://youtube.com/watch?v=..."
+							class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:border-purple-400 focus:outline-none" />
 
-    <script>
-        function subtitleApp() {
-            return {
-                // Data
-                selectedFile: null,
-                videoUrl: '',
-                selectedLanguages: ['vietnamese', 'chinese', 'korean', 'french'],
-                dragOver: false,
-                processing: false,
-                progress: 0,
-                progressMessage: '',
-                elapsedTime: 0,
-                results: null,
-                showAdvanced: false,
-                taskId: null,
-                
-                // Options
-                options: {
-                    modelSize: 'base',
-                    maxChars: 50,
-                    maxDuration: 6.0
-                },
-                
-                // Processing steps
-                processingSteps: [
-                    { id: 1, name: 'Initializing', status: 'pending' },
-                    { id: 2, name: 'Audio Extraction', status: 'pending' },
-                    { id: 3, name: 'Speech Recognition', status: 'pending' },
-                    { id: 4, name: 'Timeline Optimization', status: 'pending' },
-                    { id: 5, name: 'Language Translation', status: 'pending' },
-                    { id: 6, name: 'File Generation', status: 'pending' }
-                ],
-                
-                // Languages data (will be loaded from server)
-                languages: {},
-                
-                // Methods
-                async init() {
-                    await this.loadLanguages();
-                },
-                
-                async loadLanguages() {
-                    try {
-                        const response = await fetch('/api/languages');
-                        this.languages = await response.json();
-                    } catch (error) {
-                        console.error('Error loading languages:', error);
-                    }
-                },
-                
-                handleFileDrop(event) {
-                    this.dragOver = false;
-                    const files = event.dataTransfer.files;
-                    if (files.length > 0) {
-                        this.selectedFile = files[0];
-                        this.videoUrl = '';
-                    }
-                },
-                
-                handleFileSelect(event) {
-                    if (event.target.files.length > 0) {
-                        this.selectedFile = event.target.files[0];
-                        this.videoUrl = '';
-                    }
-                },
-                
-                formatFileSize(bytes) {
-                    if (!bytes) return '';
-                    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-                    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-                    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
-                },
-                
-                formatTime(seconds) {
-                    const mins = Math.floor(seconds / 60);
-                    const secs = Math.floor(seconds % 60);
-                    return `${mins}:${secs.toString().padStart(2, '0')}`;
-                },
-                
-                selectAll() {
-                    this.selectedLanguages = Object.keys(this.languages);
-                },
-                
-                selectNone() {
-                    this.selectedLanguages = [];
-                },
-                
-                selectPopular() {
-                    this.selectedLanguages = ['vietnamese', 'chinese', 'korean', 'japanese', 'french', 'spanish', 'german'];
-                },
-                
-                async submitForm() {
-                    if ((!this.selectedFile && !this.videoUrl) || this.selectedLanguages.length === 0) {
-                        alert('Please select a video file or URL and at least one target language.');
-                        return;
-                    }
-                    
-                    this.processing = true;
-                    this.progress = 0;
-                    this.progressMessage = 'Starting process...';
-                    this.elapsedTime = 0;
-                    this.results = null;
-                    
-                    // Reset processing steps
-                    this.processingSteps.forEach(step => step.status = 'pending');
-                    
-                    try {
-                        const formData = new FormData();
-                        
-                        if (this.selectedFile) {
-                            formData.append('file', this.selectedFile);
-                        }
-                        
-                        if (this.videoUrl) {
-                            formData.append('video_url', this.videoUrl);
-                        }
-                        
-                        // Add selected languages
-                        this.selectedLanguages.forEach(lang => {
-                            formData.append('languages', lang);
-                        });
-                        
-                        // Add options
-                        formData.append('max_chars', this.options.maxChars);
-                        formData.append('max_duration', this.options.maxDuration);
-                        formData.append('model_size', this.options.modelSize);
-                        
-                        const response = await fetch('/upload', {
-                            method: 'POST',
-                            body: formData
-                        });
-                        
-                        const result = await response.json();
-                        
-                        if (result.success) {
-                            this.taskId = result.task_id;
-                            this.startProgressTracking();
-                        } else {
-                            throw new Error(result.message);
-                        }
-                        
-                    } catch (error) {
-                        console.error('Upload error:', error);
-                        alert('Error: ' + error.message);
-                        this.processing = false;
-                    }
-                },
-                
-                async startProgressTracking() {
-                    const startTime = Date.now();
-                    
-                    const checkProgress = async () => {
-                        try {
-                            const response = await fetch(`/progress/${this.taskId}`);
-                            const data = await response.json();
-                            
-                            this.progress = data.progress || 0;
-                            this.progressMessage = data.message || 'Processing...';
-                            this.elapsedTime = (Date.now() - startTime) / 1000;
-                            
-                            // Update processing steps based on progress
-                            this.updateProcessingSteps(this.progress);
-                            
-                            if (data.status === 'completed' && data.results) {
-                                this.results = data.results;
-                                this.processing = false;
-                            } else if (data.status === 'error') {
-                                throw new Error(data.message);
-                            } else if (data.status !== 'completed') {
-                                setTimeout(checkProgress, 2000);
-                            }
-                            
-                        } catch (error) {
-                            console.error('Progress tracking error:', error);
-                            alert('Error tracking progress: ' + error.message);
-                            this.processing = false;
-                        }
-                    };
-                    
-                    checkProgress();
-                },
-                
-                updateProcessingSteps(progress) {
-                    const stepRanges = [
-                        { min: 0, max: 15, stepIndex: 0 },   // Initializing
-                        { min: 15, max: 30, stepIndex: 1 },  // Audio Extraction
-                        { min: 30, max: 70, stepIndex: 2 },  // Speech Recognition
-                        { min: 70, max: 80, stepIndex: 3 },  // Timeline Optimization
-                        { min: 80, max: 95, stepIndex: 4 },  // Language Translation
-                        { min: 95, max: 100, stepIndex: 5 }  // File Generation
-                    ];
-                    
-                    stepRanges.forEach(range => {
-                        if (progress >= range.max) {
-                            this.processingSteps[range.stepIndex].status = 'completed';
-                        } else if (progress >= range.min) {
-                            this.processingSteps[range.stepIndex].status = 'processing';
-                        }
-                    });
-                },
-                
-                async clearCache() {
-                    if (confirm('Are you sure you want to clear all cache files?')) {
-                        try {
-                            const response = await fetch('/clear_cache');
-                            if (response.ok) {
-                                alert('Cache cleared successfully!');
-                            }
-                        } catch (error) {
-                            console.error('Error clearing cache:', error);
-                            alert('Error clearing cache');
-                        }
-                    }
-                }
-            }
-        }
-    </script>
+						<div class="bg-blue-500/20 border border-blue-400/30 rounded-lg p-3">
+							<p class="text-sm text-blue-200">
+								<i class="fas fa-info-circle mr-2"></i>
+								Supports YouTube, Vimeo, and other platforms
+							</p>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Language Selection -->
+		<div class="glass-effect rounded-xl p-6 mb-8">
+			<h3 class="text-xl font-bold mb-4">
+				<i class="fas fa-language text-green-400 mr-2"></i>Target Languages
+			</h3>
+
+			<div class="flex flex-wrap gap-2 mb-4">
+				<button @click="selectAll()"
+					class="px-3 py-1 bg-green-500/20 border border-green-400/30 rounded-lg text-sm hover:bg-green-500/30 transition-colors">
+					Select All
+				</button>
+				<button @click="selectNone()"
+					class="px-3 py-1 bg-red-500/20 border border-red-400/30 rounded-lg text-sm hover:bg-red-500/30 transition-colors">
+					Clear
+				</button>
+				<button @click="selectPopular()"
+					class="px-3 py-1 bg-yellow-500/20 border border-yellow-400/30 rounded-lg text-sm hover:bg-yellow-500/30 transition-colors">
+					Popular
+				</button>
+			</div>
+
+			<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-64 overflow-y-auto">
+				<template x-for="[key, lang] in Object.entries(languages)" :key="key">
+					<label class="flex items-center p-2 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors"
+						:class="{'bg-green-500/20 border border-green-400/50': selectedLanguages.includes(key)}">
+						<input type="checkbox" :value="key" x-model="selectedLanguages" class="sr-only" />
+						<div class="flex items-center space-x-2 w-full">
+							<span x-text="lang.flag || '🌍'"></span>
+							<div class="flex-1 min-w-0">
+								<p class="text-sm font-medium truncate" x-text="lang.native || lang.name"></p>
+							</div>
+							<div class="w-4 h-4 border border-white/30 rounded flex items-center justify-center"
+								:class="{'bg-green-400 border-green-400': selectedLanguages.includes(key)}">
+								<i x-show="selectedLanguages.includes(key)" class="fas fa-check text-white text-xs"></i>
+							</div>
+						</div>
+					</label>
+				</template>
+			</div>
+
+			<div class="mt-3 text-sm text-white/70">
+				Selected:
+				<span x-text="selectedLanguages.length" class="font-medium text-green-400"></span>
+				languages
+			</div>
+		</div>
+
+		<!-- Advanced Options -->
+		<div class="glass-effect rounded-xl p-6 mb-8" x-data="{ showAdvanced: false }">
+			<div class="flex justify-between items-center mb-4">
+				<h3 class="text-xl font-bold">
+					<i class="fas fa-cog text-purple-400 mr-2"></i>Advanced Options
+				</h3>
+				<button @click="showAdvanced = !showAdvanced" class="text-purple-400 hover:text-purple-300">
+					<i :class="showAdvanced ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
+				</button>
+			</div>
+
+			<div x-show="showAdvanced" x-cloak class="space-y-4">
+				<div class="grid md:grid-cols-3 gap-4">
+					<div>
+						<label class="block text-sm font-medium mb-2">Model Size</label>
+						<select x-model="options.modelSize"
+							class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:border-purple-400 focus:outline-none">
+							<option value="tiny">Tiny (fastest)</option>
+							<option value="base">Base (recommended)</option>
+							<option value="small">Small</option>
+							<option value="medium">Medium</option>
+							<option value="large">Large (best quality)</option>
+						</select>
+					</div>
+					<div>
+						<label class="block text-sm font-medium mb-2">Max Characters</label>
+						<input type="number" x-model="options.maxChars" min="20" max="100"
+							class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:border-purple-400 focus:outline-none" />
+					</div>
+					<div>
+						<label class="block text-sm font-medium mb-2">Max Duration (seconds)</label>
+						<input type="number" x-model="options.maxDuration" min="1" max="10" step="0.5"
+							class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:border-purple-400 focus:outline-none" />
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Submit Button -->
+		<div class="text-center mb-8">
+			<button @click="submitForm()"
+				:disabled="processing || (!selectedFile && !videoUrl) || selectedLanguages.length === 0 || apiKeys.length === 0"
+				class="btn-primary px-8 py-4 rounded-xl font-bold text-lg shadow-lg">
+				<template x-if="!processing">
+					<span><i class="fas fa-magic mr-2"></i>Generate Subtitles</span>
+				</template>
+				<template x-if="processing">
+					<span><i class="fas fa-spinner fa-spin mr-2"></i>Processing...</span>
+				</template>
+			</button>
+
+			<!-- Status Messages -->
+			<div class="mt-4 text-sm">
+				<div x-show="!apiKeys.length" class="text-red-400">
+					<i class="fas fa-exclamation-triangle mr-1"></i>
+					Please add at least one API key
+				</div>
+				<div x-show="apiKeys.length && (!selectedFile && !videoUrl)" class="text-yellow-400">
+					<i class="fas fa-upload mr-1"></i>
+					Please upload a video or provide URL
+				</div>
+				<div x-show="apiKeys.length && (selectedFile || videoUrl) && selectedLanguages.length === 0"
+					class="text-yellow-400">
+					<i class="fas fa-language mr-1"></i>
+					Please select target languages
+				</div>
+				<div x-show="apiKeys.length && (selectedFile || videoUrl) && selectedLanguages.length > 0"
+					class="text-green-400">
+					<i class="fas fa-check-circle mr-1"></i>
+					Ready to process
+				</div>
+			</div>
+		</div>
+
+		<!-- Processing Modal (simplified for testing) -->
+		<!-- Enhanced Progress Modal with Timer and Step Details -->
+		<div x-show="processing" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+			<div class="glass-effect rounded-xl p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+				<!-- Header with Timer -->
+				<div class="text-center mb-6">
+					<div
+						class="w-20 h-20 mx-auto mb-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center relative">
+						<i class="fas fa-cogs text-3xl text-white" :class="{'fa-spin': currentStep.status === 'processing'}"></i>
+
+						<!-- Progress Ring -->
+						<svg class="absolute inset-0 w-20 h-20 transform -rotate-90" viewBox="0 0 36 36">
+							<path class="text-gray-300" stroke="currentColor" stroke-width="2" fill="none"
+								d="M18,2.0845 a 15.9155,15.9155 0 0,1 0,31.831 a 15.9155,15.9155 0 0,1 0,-31.831" />
+							<path class="text-blue-400" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"
+								:stroke-dasharray="`${currentStep.overall_progress}, 100`"
+								d="M18,2.0845 a 15.9155,15.9155 0 0,1 0,31.831 a 15.9155,15.9155 0 0,1 0,-31.831" />
+						</svg>
+					</div>
+
+					<h3 class="text-3xl font-bold mb-2">Processing Your Video</h3>
+
+					<!-- Current Step Info -->
+					<div class="bg-white/10 rounded-lg p-4 mb-4">
+						<div class="flex justify-between items-center mb-2">
+							<h4 class="text-lg font-semibold text-blue-300" x-text="currentStep.step_name || 'Processing'"></h4>
+							<span class="text-sm bg-blue-500/20 px-3 py-1 rounded-full"
+								x-text="`${currentStep.step_progress || 0}%`"></span>
+						</div>
+						<p class="text-white/80 text-sm" x-text="currentStep.message || 'Initializing...'"></p>
+					</div>
+
+					<!-- Timer Section -->
+					<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 text-center">
+						<div class="bg-white/5 rounded-lg p-3">
+							<div class="text-sm text-white/60">Elapsed Time</div>
+							<div class="text-xl font-bold text-green-400" x-text="formatTime(currentStep.elapsed_time)"></div>
+						</div>
+						<div class="bg-white/5 rounded-lg p-3">
+							<div class="text-sm text-white/60">Overall Progress</div>
+							<div class="text-xl font-bold text-blue-400" x-text="`${Math.round(currentStep.overall_progress || 0)}%`">
+							</div>
+						</div>
+						<div class="bg-white/5 rounded-lg p-3" x-show="currentStep.remaining_time">
+							<div class="text-sm text-white/60">Est. Remaining</div>
+							<div class="text-xl font-bold text-orange-400" x-text="formatTime(currentStep.remaining_time)"></div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Enhanced Progress Bar -->
+				<div class="mb-6">
+					<div class="flex justify-between text-sm mb-2">
+						<span class="font-medium">Overall Progress</span>
+						<span x-text="`${Math.round(currentStep.overall_progress || 0)}%`" class="font-bold"></span>
+					</div>
+					<div class="w-full bg-white/20 rounded-full h-6 relative overflow-hidden">
+						<div
+							class="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 rounded-full transition-all duration-1000 ease-out relative"
+							:style="`width: ${currentStep.overall_progress || 0}%`">
+							<!-- Animated shimmer effect -->
+							<div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-pulse">
+							</div>
+						</div>
+						<!-- Progress text overlay -->
+						<div class="absolute inset-0 flex items-center justify-center text-sm font-bold text-white/90"
+							x-text="`${Math.round(currentStep.overall_progress || 0)}%`"></div>
+					</div>
+				</div>
+
+				<!-- Enhanced Processing Steps -->
+				<div class="mb-6">
+					<h4 class="font-medium mb-4 text-center">Processing Pipeline</h4>
+					<div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+						<template x-for="(step, index) in processingSteps" :key="step.id">
+							<div class="relative">
+								<!-- Step Container -->
+								<div class="flex flex-col items-center p-4 rounded-lg transition-all duration-500" :class="{
+                                        'bg-green-500/20 border-2 border-green-500/50 transform scale-105': step.status === 'completed',
+                                        'bg-blue-500/20 border-2 border-blue-500/50 animate-pulse': step.status === 'processing',
+                                        'bg-red-500/20 border-2 border-red-500/50': step.status === 'error',
+                                        'bg-yellow-500/20 border-2 border-yellow-500/50': step.status === 'cancelled',
+                                        'bg-gray-500/10 border-2 border-gray-500/30': step.status === 'skipped',
+                                        'bg-white/5 border-2 border-white/20': step.status === 'pending'
+                                    }">
+									<!-- Step Icon with Progress Ring -->
+									<div class="relative w-16 h-16 mb-3">
+										<!-- Progress ring for current step -->
+										<svg x-show="step.status === 'processing'" class="absolute inset-0 w-16 h-16 transform -rotate-90"
+											viewBox="0 0 36 36">
+											<path class="text-gray-300" stroke="currentColor" stroke-width="2" fill="none"
+												d="M18,2.0845 a 15.9155,15.9155 0 0,1 0,31.831 a 15.9155,15.9155 0 0,1 0,-31.831" />
+											<path class="text-blue-400" stroke="currentColor" stroke-width="2" fill="none"
+												stroke-linecap="round" :stroke-dasharray="`${step.progress || 0}, 100`"
+												d="M18,2.0845 a 15.9155,15.9155 0 0,1 0,31.831 a 15.9155,15.9155 0 0,1 0,-31.831" />
+										</svg>
+
+										<!-- Icon container -->
+										<div
+											class="w-16 h-16 rounded-full border-2 flex items-center justify-center transition-all duration-500"
+											:class="{
+                                                'bg-green-500 border-green-500 text-white': step.status === 'completed',
+                                                'bg-blue-500 border-blue-500 text-white': step.status === 'processing',
+                                                'bg-red-500 border-red-500 text-white': step.status === 'error',
+                                                'bg-yellow-500 border-yellow-500 text-white': step.status === 'cancelled',
+                                                'bg-gray-500 border-gray-500 text-white': step.status === 'skipped',
+                                                'border-white/30 text-white/50': step.status === 'pending'
+                                            }">
+											<!-- Status Icons -->
+											<template x-if="step.status === 'completed'">
+												<i class="fas fa-check text-xl"></i>
+											</template>
+											<template x-if="step.status === 'processing'">
+												<i class="fas fa-spinner fa-spin text-xl"></i>
+											</template>
+											<template x-if="step.status === 'error'">
+												<i class="fas fa-times text-xl"></i>
+											</template>
+											<template x-if="step.status === 'cancelled'">
+												<i class="fas fa-stop text-xl"></i>
+											</template>
+											<template x-if="step.status === 'skipped'">
+												<i class="fas fa-forward text-xl"></i>
+											</template>
+											<template x-if="step.status === 'pending'">
+												<i :class="step.icon || 'far fa-circle'" class="text-xl"></i>
+											</template>
+										</div>
+									</div>
+
+									<!-- Step Name -->
+									<span class="text-sm font-medium text-center mb-1" x-text="step.name"></span>
+
+									<!-- Step Progress -->
+									<div x-show="step.status === 'processing' && step.progress > 0" class="text-xs text-white/70"
+										x-text="`${step.progress}%`"></div>
+
+									<!-- Step Number -->
+									<span class="text-xs opacity-75 mt-1" x-text="`${index + 1}`"></span>
+								</div>
+
+								<!-- Connection Line to Next Step -->
+								<div x-show="index < processingSteps.length - 1"
+									class="absolute top-8 left-full w-3 h-0.5 bg-white/20 hidden md:block z-10" :class="{
+                                        'bg-green-500/70': step.status === 'completed',
+                                        'bg-blue-500/70': step.status === 'processing'
+                                    }"></div>
+							</div>
+						</template>
+					</div>
+				</div>
+
+				<!-- Current Step Details -->
+				<div x-show="currentStep.step" class="mb-6 bg-white/10 rounded-lg p-4">
+					<div class="flex items-center justify-between mb-3">
+						<h5 class="font-medium text-blue-300 flex items-center">
+							<i class="fas fa-info-circle mr-2"></i>
+							Current Step Details
+						</h5>
+						<div class="flex items-center space-x-2">
+							<span class="text-xs bg-blue-500/20 px-2 py-1 rounded-full" x-text="currentStep.step || 'N/A'"></span>
+							<span class="text-xs bg-green-500/20 px-2 py-1 rounded-full"
+								x-text="`${currentStep.step_progress || 0}%`"></span>
+						</div>
+					</div>
+					<p class="text-sm text-white/80" x-text="currentStep.message"></p>
+
+					<!-- Step progress bar -->
+					<div class="mt-3">
+						<div class="w-full bg-white/20 rounded-full h-2">
+							<div class="h-full bg-blue-400 rounded-full transition-all duration-500"
+								:style="`width: ${currentStep.step_progress || 0}%`"></div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Enhanced Logs Section -->
+				<div class="bg-black/40 rounded-lg p-4 mb-6">
+					<div class="flex justify-between items-center mb-3">
+						<h4 class="font-medium flex items-center">
+							<i class="fas fa-terminal mr-2 text-green-400"></i>
+							Real-time Logs
+							<span x-show="logs.length > 0" class="ml-2 text-xs bg-green-500/20 px-2 py-1 rounded-full"
+								x-text="logs.length"></span>
+						</h4>
+						<div class="flex space-x-2">
+							<button @click="logs = []"
+								class="text-white/50 hover:text-white/70 text-sm px-3 py-1 rounded border border-white/20 hover:border-white/40 transition-colors">
+								<i class="fas fa-trash mr-1"></i>Clear
+							</button>
+							<button @click="downloadLogs()"
+								class="text-white/50 hover:text-white/70 text-sm px-3 py-1 rounded border border-white/20 hover:border-white/40 transition-colors">
+								<i class="fas fa-download mr-1"></i>Export
+							</button>
+						</div>
+					</div>
+
+					<div class="logs-container h-40 overflow-y-auto text-sm space-y-1 bg-black/30 rounded p-3">
+						<template x-for="log in logs.slice(-50)" :key="log.id">
+							<div class="flex space-x-3 py-1 font-mono text-xs" :class="{
+                                    'text-green-300': log.level === 'success' || log.level === 'info',
+                                    'text-yellow-300': log.level === 'warning',
+                                    'text-red-300': log.level === 'error'
+                                }">
+								<!-- Log Level Icon -->
+								<span class="flex-shrink-0 w-4 text-center">
+									<template x-if="log.level === 'success'">
+										<i class="fas fa-check-circle"></i>
+									</template>
+									<template x-if="log.level === 'info'">
+										<i class="fas fa-info-circle"></i>
+									</template>
+									<template x-if="log.level === 'warning'">
+										<i class="fas fa-exclamation-triangle"></i>
+									</template>
+									<template x-if="log.level === 'error'">
+										<i class="fas fa-times-circle"></i>
+									</template>
+								</span>
+
+								<!-- Timestamp -->
+								<span class="text-white/40 flex-shrink-0 font-mono" x-text="log.timestamp"></span>
+
+								<!-- Message -->
+								<span class="flex-1" x-text="log.message"></span>
+							</div>
+						</template>
+
+						<!-- Empty State -->
+						<div x-show="logs.length === 0" class="text-white/50 text-center py-8 flex flex-col items-center">
+							<i class="fas fa-hourglass-half text-2xl mb-2 opacity-50"></i>
+							<p>Waiting for logs...</p>
+						</div>
+					</div>
+				</div>
+
+				<!-- Action Buttons -->
+				<div x-show="currentStep.overall_progress < 100" class="flex justify-center space-x-4">
+					<button @click="cancelProcessing()"
+						class="px-6 py-3 bg-red-500/20 border border-red-400/30 rounded-lg text-red-400 hover:bg-red-500/30 transition-colors flex items-center">
+						<i class="fas fa-stop mr-2"></i>Cancel Processing
+					</button>
+
+					<!-- Minimize Button -->
+					<button @click="processing = false"
+						class="px-6 py-3 bg-gray-500/20 border border-gray-400/30 rounded-lg text-gray-400 hover:bg-gray-500/30 transition-colors flex items-center">
+						<i class="fas fa-minus mr-2"></i>Minimize
+					</button>
+				</div>
+
+				<!-- Processing Statistics -->
+				<div class="text-center mt-4 text-xs text-white/50 space-y-1">
+					<div x-show="currentTaskId">
+						Task ID: <span class="font-mono" x-text="currentTaskId"></span>
+					</div>
+					<div>
+						Started:
+						<span x-text="new Date(processingStartTime).toLocaleTimeString()"></span>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Results Modal (simplified) -->
+		<div x-show="results" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+			<div class="glass-effect rounded-xl p-6 max-w-2xl w-full mx-4">
+				<div class="text-center mb-6">
+					<div class="w-16 h-16 mx-auto mb-4 bg-green-500 rounded-full flex items-center justify-center">
+						<i class="fas fa-check text-2xl text-white"></i>
+					</div>
+					<h3 class="text-2xl font-bold mb-2">Subtitles Generated!</h3>
+					<p class="text-white/70" x-text="`Generated ${results?.segments_count || 0} subtitle segments`"></p>
+				</div>
+
+				<div class="space-y-2 mb-6" x-show="results?.files">
+					<template x-for="file in results?.files || []" :key="file.filename">
+						<div class="flex items-center justify-between p-3 bg-white/10 rounded-lg">
+							<div class="flex items-center space-x-2">
+								<span x-text="file.flag || '🌍'"></span>
+								<span x-text="file.name"></span>
+							</div>
+							<a :href="`/download/${file.filename}`"
+								class="px-3 py-1 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30">
+								<i class="fas fa-download mr-1"></i>Download
+							</a>
+						</div>
+					</template>
+				</div>
+
+				<div class="text-center">
+					<button @click="startNewProcessing()" class="px-6 py-3 bg-blue-500 rounded-lg hover:bg-blue-600">
+						Process Another Video
+					</button>
+				</div>
+			</div>
+		</div>
+
+		<script>
+			function subtitleApp() {
+				return {
+					// Connection
+					socket: null,
+					connectionStatus: "disconnected",
+					// Debug properties
+					roomJoined: false,
+					lastProgressUpdate: null,
+					connectionAttempts: 0,
+
+					// API Keys
+					apiKeys: [],
+					newApiKey: "",
+					validationResults: {},
+					validatedKeys: { valid: 0, invalid: 0 },
+
+					// Form Data
+					selectedFile: null,
+					videoUrl: "",
+					selectedLanguages: ["vietnamese", "chinese", "korean", "french"],
+					dragOver: false,
+
+					// Options
+					options: {
+						modelSize: "base",
+						maxChars: 50,
+						maxDuration: 6.0,
+					},
+
+					// Processing
+					processing: false,
+					currentTaskId: null,
+					currentStep: {
+						step: "",
+						step_name: "",
+						step_progress: 0,
+						overall_progress: 0,
+						message: "",
+						elapsed_time: 0,
+						remaining_time: null,
+						status: "pending",
+					},
+					results: null,
+					// Timer properties
+					processingStartTime: null,
+					timerInterval: null,
+					// Enhanced processing steps with better tracking
+					processingSteps: [
+						{
+							id: "initialization",
+							name: "Initialize",
+							status: "pending",
+							icon: "fas fa-play",
+							progress: 0,
+						},
+						{
+							id: "download",
+							name: "Download",
+							status: "pending",
+							icon: "fas fa-download",
+							progress: 0,
+						},
+						{
+							id: "transcription",
+							name: "Transcribe",
+							status: "pending",
+							icon: "fas fa-microphone",
+							progress: 0,
+						},
+						{
+							id: "timing",
+							name: "Optimize",
+							status: "pending",
+							icon: "fas fa-clock",
+							progress: 0,
+						},
+						{
+							id: "translation",
+							name: "Translate",
+							status: "pending",
+							icon: "fas fa-language",
+							progress: 0,
+						},
+						{
+							id: "completion",
+							name: "Complete",
+							status: "pending",
+							icon: "fas fa-check",
+							progress: 0,
+						},
+					],
+
+					// Logs with better categorization
+					logs: [],
+
+					// Languages - Default set for testing
+					languages: {
+						vietnamese: {
+							code: "vi",
+							name: "Vietnamese",
+							native: "Tiếng Việt",
+							flag: "🇻🇳",
+						},
+						chinese: {
+							code: "zh-cn",
+							name: "Chinese",
+							native: "中文",
+							flag: "🇨🇳",
+						},
+						korean: {
+							code: "ko",
+							name: "Korean",
+							native: "한국어",
+							flag: "🇰🇷",
+						},
+						french: {
+							code: "fr",
+							name: "French",
+							native: "Français",
+							flag: "🇫🇷",
+						},
+						spanish: {
+							code: "es",
+							name: "Spanish",
+							native: "Español",
+							flag: "🇪🇸",
+						},
+						german: {
+							code: "de",
+							name: "German",
+							native: "Deutsch",
+							flag: "🇩🇪",
+						},
+						japanese: {
+							code: "ja",
+							name: "Japanese",
+							native: "日本語",
+							flag: "🇯🇵",
+						},
+						italian: {
+							code: "it",
+							name: "Italian",
+							native: "Italiano",
+							flag: "🇮🇹",
+						},
+					},
+
+					async init() {
+						console.log("Initializing Subtitle App...");
+						await this.loadLanguages();
+						this.initWebSocket();
+						this.loadApiKeysFromStorage();
+						console.log("App initialized successfully");
+					},
+
+					initWebSocket() {
+						const socketUrl = window.location.origin;
+						console.log(
+							`WebSocket connection attempt ${this.connectionAttempts}`
+						);
+
+						try {
+							this.socket = io(socketUrl, {
+								transports: ["websocket", "polling"],
+								timeout: 600000,
+								reconnection: true,
+								reconnectionAttempts: 10,
+								reconnectionDelay: 1000,
+								reconnectionDelayMax: 5000,
+							});
+
+							this.socket.on("connect", () => {
+								this.connectionStatus = "connected";
+								console.log("✅ Socket connected with ID:", this.socket.id);
+								this.addLog(
+									"success",
+									`Connected to server (${this.socket.id})`
+								);
+
+								// Re-join room nếu đang processing
+								if (this.processing && this.currentTaskId) {
+									this.joinTaskRoom(this.currentTaskId);
+								}
+							});
+
+							this.socket.on("disconnect", (reason) => {
+								this.connectionStatus = "disconnected";
+								this.roomJoined = false;
+								console.log("❌ Socket disconnected:", reason);
+								this.addLog("warning", `Disconnected: ${reason}`);
+
+								// Tự động reconnect nếu đang processing
+								if (this.processing) {
+									setTimeout(() => {
+										console.log("🔄 Auto-reconnecting after disconnect...");
+										this.initWebSocket();
+									}, 2000);
+								}
+							});
+
+							this.socket.on("connect_error", (error) => {
+								this.connectionStatus = "error";
+								console.error("🚨 Socket connection error:", error);
+								this.addLog("error", `Connection error: ${error.message}`);
+
+								// Thử lại sau 3 giây
+								setTimeout(() => {
+									if (
+										this.processing &&
+										this.connectionStatus !== "connected"
+									) {
+										console.log("🔄 Retrying connection after error...");
+										this.initWebSocket();
+									}
+								}, 3000);
+							});
+
+							// Room events
+							this.socket.on("room_joined", (data) => {
+								this.roomJoined = true;
+								console.log("🏠 Joined room:", data);
+								this.addLog("info", `Joined task room: ${data.task_id}`);
+							});
+
+							this.socket.on("progress_update", (data) => {
+								console.log("📊 Progress update received:", data);
+								this.lastProgressUpdate = Date.now();
+								this.handleProgressUpdate(data);
+							});
+
+							// Backup broadcast listener
+							this.socket.on("progress_update_broadcast", (data) => {
+								console.log("📡 Progress broadcast received:", data);
+								this.lastProgressUpdate = Date.now();
+								if (!this.roomJoined) {
+									console.warn("⚠️ Using broadcast because room not joined");
+									this.handleProgressUpdate(data);
+								}
+							});
+
+							this.socket.on("task_completed", (data) => {
+								console.log("✅ Task completed:", data);
+								this.handleTaskCompleted(data);
+							});
+
+							this.socket.on("task_completed_broadcast", (data) => {
+								console.log("📡 Task completed broadcast received:", data);
+								if (!this.roomJoined) {
+									console.warn("⚠️ Using broadcast completion");
+									this.handleTaskCompleted(data);
+								}
+							});
+
+							this.socket.on("task_status", (data) => {
+								console.log("📋 Task status:", data);
+								this.addLog("info", data.message);
+							});
+
+							this.socket.on("test_message", (data) => {
+								console.log("📋 Test test:", data);
+								this.addLog("info", data.message);
+							});
+
+							// Reconnection events
+							this.socket.on("reconnect", (attemptNumber) => {
+								console.log(`🔄 Reconnected after ${attemptNumber} attempts`);
+								this.addLog(
+									"success",
+									`Reconnected after ${attemptNumber} attempts`
+								);
+
+								// Re-join task room if processing
+								if (this.processing && this.currentTaskId) {
+									this.joinTaskRoom(this.currentTaskId);
+								}
+							});
+						} catch (error) {
+							console.error("💥 WebSocket initialization failed:", error);
+							this.connectionStatus = "error";
+							this.addLog("error", `Init failed: ${error.message}`);
+						}
+					},
+
+					// Separate method for joining task room
+					joinTaskRoom(taskId) {
+						if (!this.socket || !this.socket.connected) {
+							console.error("❌ Cannot join room - socket not connected");
+							this.addLog("error", "Cannot join room - socket not connected");
+							return;
+						}
+
+						console.log(`🏠 Attempting to join task room: ${taskId}`);
+						this.roomJoined = false;
+
+						this.socket.emit("join_task", { task_id: taskId });
+
+						// Set multiple timeouts để check
+						setTimeout(() => {
+							if (!this.roomJoined) {
+								console.warn(
+									"⚠️ Room join may have failed after 2s, but continuing..."
+								);
+								this.addLog(
+									"warning",
+									"Room join timeout - progress may still work"
+								);
+							}
+						}, 2000);
+
+						setTimeout(() => {
+							if (!this.roomJoined) {
+								console.error("❌ Room join definitely failed after 5s");
+								this.addLog(
+									"error",
+									"Room join failed - progress updates may not work"
+								);
+							}
+						}, 5000);
+					},
+
+					// Enhanced progress update handling
+					handleProgressUpdate(data) {
+						console.log("🔄 Handling progress update:", data);
+
+						// Kiểm tra task_id
+						if (!data.task_id) {
+							console.warn("⚠️ Progress update missing task_id:", data);
+							return;
+						}
+
+						if (this.currentTaskId && data.task_id !== this.currentTaskId) {
+							console.warn(
+								`⚠️ Progress for different task: ${data.task_id} vs ${this.currentTaskId}`
+							);
+							return;
+						}
+
+						// Cập nhật currentStep với tất cả data
+						this.currentStep = {
+							step: data.step || "unknown",
+							step_name: data.step_name || this.getStepName(data.step),
+							step_progress: Math.max(
+								0,
+								Math.min(100, data.step_progress || 0)
+							),
+							overall_progress: Math.max(
+								0,
+								Math.min(100, data.overall_progress || 0)
+							),
+							message: data.message || "Processing...",
+							elapsed_time: data.elapsed_time || 0,
+							remaining_time: data.remaining_time,
+							status: data.status || "processing",
+						};
+
+						// Cập nhật processing steps
+						this.updateProcessingSteps(
+							data.step,
+							data.step_progress,
+							data.status
+						);
+
+						// Thêm vào logs
+						this.addLog(
+							"info",
+							`${data.step_name || data.step}: ${data.message}`
+						);
+
+						// Force UI update
+						this.$nextTick(() => {
+							console.log(
+								"🎨 UI updated with progress:",
+								this.currentStep.overall_progress
+							);
+						});
+					},
+
+					getStepName(stepId) {
+						const stepNames = {
+							initialization: "Initialization",
+							download: "Download",
+							transcription: "Transcription",
+							timing: "Timing Optimization",
+							translation: "Translation",
+							completion: "Completion",
+						};
+						return stepNames[stepId] || stepId;
+					},
+
+					// Validate progress values
+					validateProgress(value) {
+						if (typeof value !== "number" || isNaN(value)) return 0;
+						return Math.max(0, Math.min(100, value));
+					},
+
+					// Enhanced step updating
+					updateProcessingSteps(currentStepId, stepProgress, status) {
+						console.log("Updating steps:", currentStepId, stepProgress, status);
+
+						// Tìm step hiện tại và cập nhật
+						const currentStep = this.processingSteps.find(
+							(step) => step.id === currentStepId
+						);
+						if (currentStep) {
+							currentStep.progress = Math.max(
+								0,
+								Math.min(100, stepProgress || 0)
+							);
+
+							if (status === "completed" || stepProgress >= 100) {
+								currentStep.status = "completed";
+								currentStep.progress = 100;
+							} else if (status === "error") {
+								currentStep.status = "error";
+							} else if (stepProgress > 0) {
+								currentStep.status = "processing";
+							}
+
+							console.log(
+								`Updated step ${currentStepId}: ${currentStep.status} (${currentStep.progress}%)`
+							);
+						}
+
+						// Cập nhật các step trước đó thành completed
+						let foundCurrent = false;
+						for (let step of this.processingSteps) {
+							if (step.id === currentStepId) {
+								foundCurrent = true;
+								continue;
+							}
+
+							if (
+								!foundCurrent &&
+								step.status !== "completed" &&
+								step.status !== "skipped"
+							) {
+								step.status = "completed";
+								step.progress = 100;
+							}
+						}
+					},
+
+					// Start processing timer
+					startProcessingTimer() {
+						this.processingStartTime = Date.now();
+
+						this.timerInterval = setInterval(() => {
+							if (this.processing && this.processingStartTime) {
+								const elapsed = (Date.now() - this.processingStartTime) / 1000;
+								this.currentStep.elapsed_time = elapsed;
+							}
+						}, 1000);
+					},
+
+					// Stop processing timer
+					stopProcessingTimer() {
+						if (this.timerInterval) {
+							clearInterval(this.timerInterval);
+							this.timerInterval = null;
+						}
+					},
+
+					// Format time helper
+					formatTime(seconds) {
+						if (!seconds || seconds < 0) return "00:00";
+
+						const mins = Math.floor(seconds / 60);
+						const secs = Math.floor(seconds % 60);
+						return `${mins.toString().padStart(2, "0")}:${secs
+							.toString()
+							.padStart(2, "0")}`;
+					},
+
+					// Enhanced task completion handling
+					handleTaskCompleted(data) {
+						if (!data.task_id || data.task_id !== this.currentTaskId) {
+							console.warn(
+								"Received completion for different task:",
+								data.task_id,
+								"vs",
+								this.currentTaskId
+							);
+							return;
+						}
+
+						this.results = data.results || {};
+						console.log('data', data, this.results)
+						this.processing = false;
+
+						console.log("Task completed:", data);
+
+						// Stop timer
+						this.stopProcessingTimer();
+
+						// Mark all steps as completed
+						this.processingSteps.forEach((step) => {
+							if (step.status !== "skipped") {
+								step.status = "completed";
+								step.progress = 100;
+							}
+						});
+
+						this.addLog("success", "Processing completed successfully!");
+
+						// Update progress to 100%
+						this.currentStep = {
+							step: "completion",
+							step_name: "Completion",
+							step_progress: 100,
+							overall_progress: 100,
+							message: `All tasks completed! Generated ${this.results.segments_count || 0
+								} subtitle segments.`,
+							elapsed_time:
+								data.results.total_time || this.currentStep.elapsed_time,
+							remaining_time: 0,
+							status: "completed",
+						};
+
+
+						// Show completion notification if browser supports it
+						if (
+							"Notification" in window &&
+							Notification.permission === "granted"
+						) {
+							new Notification("Subtitle Generation Complete", {
+								body: `Successfully generated subtitles with ${this.results.segments_count || 0
+									} segments`,
+								icon: "/favicon.ico",
+							});
+						}
+					},
+
+					// API Keys Management
+					addApiKeys() {
+						const keys = this.newApiKey
+							.split("\n")
+							.map((key) => key.trim())
+							.filter((key) => key.length > 0);
+
+						keys.forEach((key) => {
+							if (!this.apiKeys.includes(key)) {
+								this.apiKeys.push(key);
+							}
+						});
+
+						this.newApiKey = "";
+						this.saveApiKeysToStorage();
+					},
+
+					removeApiKey(index) {
+						this.apiKeys.splice(index, 1);
+						this.saveApiKeysToStorage();
+					},
+
+					clearApiKeys() {
+						this.apiKeys = [];
+						this.validationResults = {};
+						this.validatedKeys = { valid: 0, invalid: 0 };
+						this.saveApiKeysToStorage();
+					},
+
+					async validateKeys() {
+						if (this.apiKeys.length === 0) return;
+
+						console.log("Validating API keys...");
+
+						try {
+							const response = await fetch("/api/validate_keys", {
+								method: "POST",
+								headers: { "Content-Type": "application/json" },
+								body: JSON.stringify({ api_keys: this.apiKeys }),
+							});
+
+							const result = await response.json();
+							if (result.success) {
+								this.validatedKeys = {
+									valid: result.valid_keys,
+									invalid: result.invalid_keys,
+								};
+								console.log(
+									`Validation complete: ${result.valid_keys} valid, ${result.invalid_keys} invalid`
+								);
+							} else {
+								console.error(`Validation failed: ${result.message}`);
+							}
+						} catch (error) {
+							console.error("Validation error:", error);
+						}
+					},
+
+					saveApiKeysToStorage() {
+						try {
+							localStorage.setItem(
+								"subtitle_api_keys",
+								JSON.stringify(this.apiKeys)
+							);
+						} catch (error) {
+							console.error("Failed to save API keys:", error);
+						}
+					},
+
+					loadApiKeysFromStorage() {
+						try {
+							const stored = localStorage.getItem("subtitle_api_keys");
+							if (stored) {
+								this.apiKeys = JSON.parse(stored);
+							}
+						} catch (error) {
+							console.error("Error loading API keys:", error);
+						}
+					},
+
+					// File Handling
+					handleFileSelect(event) {
+						if (event.target.files.length > 0) {
+							this.selectedFile = event.target.files[0];
+							this.videoUrl = "";
+							console.log("File selected:", this.selectedFile.name);
+						}
+					},
+
+					handleFileDrop(event) {
+						this.dragOver = false;
+						const files = event.dataTransfer.files;
+
+						if (files.length > 0) {
+							this.selectedFile = files[0];
+							this.videoUrl = "";
+							console.log("File dropped:", this.selectedFile.name);
+						}
+					},
+
+					formatFileSize(bytes) {
+						if (!bytes) return "";
+						const sizes = ["Bytes", "KB", "MB", "GB"];
+						const i = Math.floor(Math.log(bytes) / Math.log(1024));
+						return (
+							Math.round((bytes / Math.pow(1024, i)) * 100) / 100 +
+							" " +
+							sizes[i]
+						);
+					},
+
+					// Language Selection
+					selectAll() {
+						this.selectedLanguages = Object.keys(this.languages);
+					},
+
+					selectNone() {
+						this.selectedLanguages = [];
+					},
+
+					selectPopular() {
+						this.selectedLanguages = [
+							"vietnamese",
+							"chinese",
+							"korean",
+							"japanese",
+							"french",
+							"spanish",
+						];
+					},
+
+					async loadLanguages() {
+						try {
+							const response = await fetch("/api/languages");
+							const languages = await response.json();
+							this.languages = { ...languages };
+							console.log(
+								"Languages loaded:",
+								Object.keys(this.languages).length
+							);
+						} catch (error) {
+							console.error("Error loading languages:", error);
+							// Keep default languages if API fails
+						}
+					},
+
+					// Form Submission
+					async submitForm() {
+						if (!this.selectedFile && !this.videoUrl) {
+							alert("Please select a video file or provide a URL");
+							return;
+						}
+
+						if (this.selectedLanguages.length === 0) {
+							alert("Please select at least one target language");
+							return;
+						}
+
+						if (this.apiKeys.length === 0) {
+							alert("Please provide at least one Gemini API key");
+							return;
+						}
+
+						// Check WebSocket connection
+						if (!this.socket || !this.socket.connected) {
+							console.error("❌ WebSocket not connected");
+							if (confirm("WebSocket not connected. Try to reconnect?")) {
+								this.initWebSocket();
+								await this.waitForConnection();
+							} else {
+								return;
+							}
+						}
+
+						this.processing = true;
+						this.logs = [];
+						this.results = null;
+						this.currentTaskId = null;
+						this.roomJoined = false;
+
+						// Reset processing steps
+						this.processingSteps.forEach((step) => {
+							step.status = "pending";
+							step.progress = 0;
+						});
+
+						// Reset current step
+						this.currentStep = {
+							step: "initialization",
+							step_name: "Initialization",
+							step_progress: 0,
+							overall_progress: 0,
+							message: "Preparing to start...",
+							elapsed_time: 0,
+							remaining_time: null,
+							status: "pending",
+						};
+
+						// Reset processing state
+						this.resetProcessingState();
+
+						// Start timer
+						this.startProcessingTimer();
+
+						try {
+							const formData = new FormData();
+
+							if (this.selectedFile) {
+								formData.append("file", this.selectedFile);
+							}
+
+							if (this.videoUrl) {
+								formData.append("video_url", this.videoUrl);
+							}
+
+							formData.append("api_keys", this.apiKeys.join("\n"));
+
+							this.selectedLanguages.forEach((lang) => {
+								formData.append("languages", lang);
+							});
+
+							formData.append("max_chars", this.options.maxChars);
+							formData.append("max_duration", this.options.maxDuration);
+							formData.append("model_size", this.options.modelSize);
+
+							console.log("📤 Submitting processing request...");
+							this.addLog("info", "Submitting processing request...");
+
+							const response = await fetch("/upload", {
+								method: "POST",
+								body: formData,
+							});
+
+							const result = await response.json();
+
+							if (result.success) {
+								this.currentTaskId = result.task_id;
+								console.log(
+									`✅ Processing started with task ID: ${this.currentTaskId}`
+								);
+								this.addLog(
+									"success",
+									`Processing started with task ID: ${this.currentTaskId}`
+								);
+
+								// Join task room
+								this.joinTaskRoom(this.currentTaskId);
+
+								// Set first step as processing
+								this.processingSteps[0].status = "processing";
+
+								// Set timeout to check for progress updates
+							} else {
+								throw new Error(result.message || "Unknown error occurred");
+							}
+						} catch (error) {
+							console.error("💥 Submit error:", error);
+							this.stopProcessingTimer();
+							this.processing = false;
+							this.processingSteps.forEach((step) => {
+								if (step.status === "processing") {
+									step.status = "error";
+								}
+							});
+						}
+					},
+
+					// Wait for WebSocket connection
+					async waitForConnection(timeout = 5000) {
+						return new Promise((resolve, reject) => {
+							if (this.socket && this.socket.connected) {
+								resolve();
+								return;
+							}
+
+							const startTime = Date.now();
+							const checkConnection = () => {
+								if (this.socket && this.socket.connected) {
+									resolve();
+								} else if (Date.now() - startTime > timeout) {
+									reject(new Error("Connection timeout"));
+								} else {
+									setTimeout(checkConnection, 100);
+								}
+							};
+
+							checkConnection();
+						});
+					},
+
+					// Reset processing state
+					resetProcessingState() {
+						this.processingSteps.forEach((step) => {
+							step.status = "pending";
+							step.progress = 0;
+						});
+
+						this.currentStep = {
+							step: "initialization",
+							step_name: "Initialization",
+							step_progress: 0,
+							overall_progress: 0,
+							message: "Preparing to start...",
+							elapsed_time: 0,
+							remaining_time: null,
+							status: "pending",
+						};
+
+						this.lastProgressUpdate = null;
+					},
+
+					cancelProcessing() {
+						if (confirm("Are you sure you want to cancel processing?")) {
+							this.processing = false;
+							this.stopProcessingTimer();
+
+							if (this.currentTaskId) {
+								this.socket.emit("leave_task", { task_id: this.currentTaskId });
+							}
+
+							// Reset states
+							this.processingSteps.forEach((step) => {
+								if (step.status === "processing") {
+									step.status = "cancelled";
+								}
+							});
+
+							this.currentStep = {
+								step: "cancelled",
+								step_name: "Cancelled",
+								step_progress: 0,
+								overall_progress: 0,
+								message: "Processing cancelled",
+								elapsed_time: this.currentStep.elapsed_time,
+								remaining_time: null,
+								status: "cancelled",
+							};
+
+							this.addLog("warning", "Processing cancelled by user");
+						}
+					},
+
+					startNewProcessing() {
+						this.results = null;
+						this.processing = false;
+						this.selectedFile = null;
+						this.videoUrl = "";
+						this.logs = [];
+						this.currentTaskId = null;
+
+						// Stop any running timer
+						this.stopProcessingTimer();
+
+						// Reset processing steps
+						this.processingSteps.forEach((step) => {
+							step.status = "pending";
+							step.progress = 0;
+						});
+
+						this.currentStep = {
+							step: "",
+							step_name: "",
+							step_progress: 0,
+							overall_progress: 0,
+							message: "",
+							elapsed_time: 0,
+							remaining_time: null,
+							status: "pending",
+						};
+
+						// Clear file input
+						const fileInput = this.$refs.fileInput;
+						if (fileInput) {
+							fileInput.value = "";
+						}
+					},
+
+					// Enhanced logging
+					addLog(level, message) {
+						const log = {
+							id: Date.now() + Math.random(),
+							timestamp: new Date().toLocaleTimeString(),
+							level,
+							message,
+						};
+
+						this.logs.push(log);
+
+						// Keep only last 100 logs
+						if (this.logs.length > 100) {
+							this.logs = this.logs.slice(-100);
+						}
+
+						// Auto-scroll logs
+						this.$nextTick(() => {
+							const logContainer = document.querySelector(".logs-container");
+							if (logContainer) {
+								logContainer.scrollTop = logContainer.scrollHeight;
+							}
+						});
+					},
+
+					// Download logs functionality
+					downloadLogs() {
+						if (this.logs.length === 0) {
+							alert("No logs to download");
+							return;
+						}
+
+						const logContent = this.logs
+							.map(
+								(log) =>
+									`[${log.timestamp}] ${log.level.toUpperCase()}: ${log.message
+									}`
+							)
+							.join("\n");
+
+						const blob = new Blob([logContent], { type: "text/plain" });
+						const url = URL.createObjectURL(blob);
+						const a = document.createElement("a");
+						a.href = url;
+						a.download = `subtitle-processing-logs-${new Date()
+							.toISOString()
+							.slice(0, 19)
+							.replace(/:/g, "-")}.txt`;
+						document.body.appendChild(a);
+						a.click();
+						document.body.removeChild(a);
+						URL.revokeObjectURL(url);
+
+						this.addLog("info", "Logs exported successfully");
+					},
+
+					async clearCache() {
+						if (confirm("Are you sure you want to clear all cache files?")) {
+							try {
+								const response = await fetch('/api/clear_cache', {
+									method: "POST",
+								});
+								if (response.ok) {
+									alert('Cache cleared successfully!');
+								}
+							} catch (error) {
+								console.error('Error clearing cache: ', error);
+								alert('Error clearing cache');
+							}
+						}
+					}
+				};
+			}
+		</script>
 </body>
+
 </html>

@@ -27,7 +27,7 @@ RUN mkdir -p uploads output cache temp logs static templates && \
     chown -R appuser:appuser /app
 
 # Copy application files
-COPY web_app.py video_subtitle_processor.py ./
+COPY web_app.py video_subtitle_processor.py enhanced_translation_manager.py ./
 COPY templates/ templates/
 COPY static/ static/
 COPY gunicorn.conf.py logging.conf ./
