@@ -1,48 +1,41 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Starting AI Video Subtitle Generator..."
+echo "Starting AI Video Subtitle Generator..."
 
-# Environment
-export FLASK_ENV=${FLASK_ENV:-development}
-export DEBUG=${DEBUG:-true}
+export FLASK_ENV=${FLASK_ENV:-production}
+export DEBUG=${DEBUG:-false}
 export PORT=${PORT:-5050}
 
-# Create and fix directories
+# Create directories
 mkdir -p uploads output cache temp logs /home/appuser/.cache/whisper
 chmod -R 755 uploads output cache temp logs 2>/dev/null || true
 
-echo "📁 Directories setup completed"
+echo "Directories setup completed"
 
-# Check Python packages
-echo "🔍 Checking Python environment..."
+# Check dependencies
+echo "Checking dependencies..."
 python -c "
 import sys
-required = ['flask', 'whisper', 'pysrt']
-missing = []
+required = ['flask', 'flask_socketio', 'eventlet']
 for pkg in required:
     try:
         __import__(pkg)
         print(f'✓ {pkg}')
     except ImportError:
-        missing.append(pkg)
         print(f'✗ {pkg} missing')
-
-if missing:
-    print(f'Installing missing packages: {missing}')
-    import subprocess
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install'] + missing)
+        sys.exit(1)
 "
 
-# Pre-load Whisper model (optional)
+# Pre-load Whisper model
 if [ "$SKIP_MODEL_PRELOAD" != "true" ]; then
-    echo "📦 Pre-loading Whisper model..."
+    echo "Pre-loading Whisper model..."
     python -c "
-import whisper
+from faster_whisper import WhisperModel
 import os
 try:
     model_size = os.environ.get('WHISPER_MODEL_SIZE', 'base')
-    model = whisper.load_model(model_size)
+    model = WhisperModel(model_size, device='cpu', compute_type='int8')
     print(f'✓ Whisper {model_size} model loaded')
 except Exception as e:
     print(f'⚠ Model preload failed: {e}')
@@ -50,7 +43,7 @@ except Exception as e:
 fi
 
 # Start application
-echo "🌐 Starting web application..."
+echo "Starting web application..."
 if [ "$DEBUG" = "true" ] || [ "$FLASK_ENV" = "development" ]; then
     echo "Development mode"
     exec python web_app.py

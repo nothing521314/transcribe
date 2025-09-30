@@ -523,7 +523,7 @@ def load_from_cache(file_hash, cache_type="transcription"):
         logger.error(f"Error loading cache: {e}")
     return None
 
-def cleanup_cancelled_task(task_id):
+def cleanup_task(task_id, status = 'cancelled'):
     """Clean up resources for cancelled task"""
     try:
         # Clean up processor
@@ -540,7 +540,7 @@ def cleanup_cancelled_task(task_id):
             
         # Update task status
         if task_id in processing_tasks:
-            processing_tasks[task_id]["status"] = "cancelled"
+            processing_tasks[task_id]["status"] = status
             processing_tasks[task_id]["end_time"] = datetime.now()
             
         logger.info(f"Cleaned up cancelled task: {task_id}")
@@ -614,7 +614,7 @@ def process_video_task_enhanced(
             try:
                 # Emit to specific room
                 socketio.emit("progress_update", progress_data, room=task_id)
-                
+                processing_tasks[task_id]["message"] = message
                 # Log the emission for debugging
                 logger.info(f"[{task_id}] {step_id} {step_progress}% - {message}")
                 
@@ -872,7 +872,7 @@ def process_video_task_enhanced(
 
     except InterruptedError as e:
         logger.info(f"Task {task_id} was cancelled: {e}")
-        cleanup_cancelled_task(task_id)
+        cleanup_task(task_id)
         
         # Emit cancellation notification
         try:
@@ -899,7 +899,7 @@ def process_video_task_enhanced(
         socketio.emit("progress_update", error_data, room=task_id)
     finally:
         # Always clean up resources
-        cleanup_cancelled_task(task_id)
+        cleanup_task(task_id, 'completed')
 
 
 # Enhanced WebSocket event handlers
@@ -1407,6 +1407,7 @@ def clear_cache():
 def history():
     """Processing history with enhanced information"""
     completed_tasks = []
+    logger.warning(f"processing_tasks: {processing_tasks}")
     for task_id, task in processing_tasks.items():
         if task["status"] == "completed":
             task_info = {
@@ -1443,11 +1444,10 @@ def get_progress(task_id):
     
     response = {
         'status': task['status'],
-        'progress': task['progress'],
         'message': task['message'],
         'elapsed_time': elapsed_time,
         'cancellable': task['status'] in ['queued', 'processing'],
-        # 'is_cancelled': cancel_flags.get(task_id, False)
+        'is_cancelled': cancel_flags.get(task_id, False)
     }
     
     if task['status'] == 'completed' and task['results']:

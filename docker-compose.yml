@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  # Web Application
+  subtitle-webapp:
+    build:
+      context: .
+      dockerfile: Dockerfile.webapp
+    container_name: subtitle-webapp
+    ports:
+      - "5050:5050"
+    environment:
+      # Application Settings
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-this}
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - DEBUG=${DEBUG:-false}
+      - PORT=5050
+      
+      # Whisper Configuration
+      - WHISPER_MODEL_SIZE=${WHISPER_MODEL_SIZE:-base}
+      
+      # Processing Settings
+      - CACHE_EXPIRE_HOURS=${CACHE_EXPIRE_HOURS:-168}
+      
+      # Performance
+      - WORKERS=${WORKERS:-4}
+      - TIMEOUT=${TIMEOUT:-600}
+      
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      
+      # Timezone
+      - TZ=Asia/Ho_Chi_Minh
+      
+    volumes:
+      # Application directories
+      - ./uploads:/app/uploads:rw
+      - ./output:/app/output:rw
+      - ./cache:/app/cache:rw
+      - ./temp:/app/temp:rw
+      - ./logs:/app/logs:rw
+      
+      # Whisper model cache (persistent)
+      - whisper-models:/home/appuser/.cache/whisper:rw
+      
+    networks:
+      - subtitle-network
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5050/api/stats"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
+    
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '4.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # File Browser for easy file management
+  filebrowser:
+    image: filebrowser/filebrowser:latest
+    container_name: subtitle-filebrowser
+    ports:
+      - "8080:80"
+    volumes:
+      - ./uploads:/srv/uploads:rw
+      - ./output:/srv/output:rw
+      - ./cache:/srv/cache:rw
+      - ./logs:/srv/logs:ro
+      - filebrowser-db:/database
+    environment:
+      - FB_NOAUTH=${FB_NOAUTH:-false}
+    networks:
+      - subtitle-network
+    restart: unless-stopped
+    
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+
+networks:
+  subtitle-network:
+    driver: bridge
+
+volumes:
+  whisper-models:
+    driver: local
+  filebrowser-db:
+    driver: local

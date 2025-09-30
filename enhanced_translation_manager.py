@@ -406,7 +406,7 @@ Return ONLY the translations numbered 1-{len(texts)}."""
             # Emit progress BEFORE processing
             self.emit_progress(
                 "translation",
-                f"Translating to {target_language}: batch {batch_idx + 1}/{total_batches}",
+                f"Translating to {target_language}: {batch_progress*100:.0f}% (batch {batch_idx + 1}/{total_batches})",
                 batch_progress,
                 target_language,
             )
@@ -422,7 +422,7 @@ Return ONLY the translations numbered 1-{len(texts)}."""
                 # Emit fallback notification
                 self.emit_progress(
                     "translation",
-                    f"Using Google Translate fallback for {target_language}: batch {batch_idx + 1}/{total_batches}",
+                    f"Using Google Translate fallback for {target_language}: {batch_progress*100:.0f}% (batch {batch_idx + 1}/{total_batches})",
                     batch_progress,
                     target_language,
                 )
