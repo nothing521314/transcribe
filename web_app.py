@@ -22,8 +22,6 @@ import logging
 from video_subtitle_processor import OptimizedVideoSubtitleProcessor
 from enhanced_translation_manager import EnhancedTranslationManager
 import yt_dlp
-from io import StringIO
-import sys
 
 # Enhanced logging setup
 logging.basicConfig(
@@ -68,43 +66,43 @@ ALLOWED_EXTENSIONS = {
 # Danh sách ngôn ngữ hỗ trợ mở rộng
 SUPPORTED_LANGUAGES = {
     "vietnamese": {"code": "vi", "name": "Tiếng Việt", "native": "Tiếng Việt", "flag": "🇻🇳"},
-    "english": {"code": "en", "name": "English", "native": "English", "flag": "🇺🇸"},
-    "chinese": {"code": "zh-cn", "name": "Chinese (Simplified)", "native": "中文 (简体)", "flag": "🇨🇳"},
-    "chinese_traditional": {"code": "zh-tw", "name": "Chinese (Traditional)", "native": "中文 (繁體)", "flag": "🇹🇼"},
-    "japanese": {"code": "ja", "name": "Japanese", "native": "日本語", "flag": "🇯🇵"},
-    "korean": {"code": "ko", "name": "Korean", "native": "한국어", "flag": "🇰🇷"},
-    "french": {"code": "fr", "name": "French", "native": "Français", "flag": "🇫🇷"},
-    "spanish": {"code": "es", "name": "Spanish", "native": "Español", "flag": "🇪🇸"},
-    "german": {"code": "de", "name": "German", "native": "Deutsch", "flag": "🇩🇪"},
-    "italian": {"code": "it", "name": "Italian", "native": "Italiano", "flag": "🇮🇹"},
-    "portuguese": {"code": "pt", "name": "Portuguese", "native": "Português", "flag": "🇵🇹"},
-    "russian": {"code": "ru", "name": "Russian", "native": "Русский", "flag": "🇷🇺"},
-    "arabic": {"code": "ar", "name": "Arabic", "native": "العربية", "flag": "🇸🇦"},
-    "thai": {"code": "th", "name": "Thai", "native": "ไทย", "flag": "🇹🇭"},
-    "hindi": {"code": "hi", "name": "Hindi", "native": "हिन्दी", "flag": "🇮🇳"},
-    "indonesian": {"code": "id", "name": "Indonesian", "native": "Bahasa Indonesia", "flag": "🇮🇩"},
-    "malaysian": {"code": "ms", "name": "Malaysian", "native": "Bahasa Malaysia", "flag": "🇲🇾"},
-    "dutch": {"code": "nl", "name": "Dutch", "native": "Nederlands", "flag": "🇳🇱"},
-    "swedish": {"code": "sv", "name": "Swedish", "native": "Svenska", "flag": "🇸🇪"},
-    "norwegian": {"code": "no", "name": "Norwegian", "native": "Norsk", "flag": "🇳🇴"},
-    "danish": {"code": "da", "name": "Danish", "native": "Dansk", "flag": "🇩🇰"},
-    "polish": {"code": "pl", "name": "Polish", "native": "Polski", "flag": "🇵🇱"},
-    "czech": {"code": "cs", "name": "Czech", "native": "Čeština", "flag": "🇨🇿"},
-    "hungarian": {"code": "hu", "name": "Hungarian", "native": "Magyar", "flag": "🇭🇺"},
-    "turkish": {"code": "tr", "name": "Turkish", "native": "Türkçe", "flag": "🇹🇷"},
-    "greek": {"code": "el", "name": "Greek", "native": "Ελληνικά", "flag": "🇬🇷"},
-    "hebrew": {"code": "he", "name": "Hebrew", "native": "עברית", "flag": "🇮🇱"},
-    "finnish": {"code": "fi", "name": "Finnish", "native": "Suomi", "flag": "🇫🇮"},
-    "ukrainian": {"code": "uk", "name": "Ukrainian", "native": "Українська", "flag": "🇺🇦"},
-    "bulgarian": {"code": "bg", "name": "Bulgarian", "native": "Български", "flag": "🇧🇬"},
-    "romanian": {"code": "ro", "name": "Romanian", "native": "Română", "flag": "🇷🇴"},
-    "croatian": {"code": "hr", "name": "Croatian", "native": "Hrvatski", "flag": "🇭🇷"},
-    "serbian": {"code": "sr", "name": "Serbian", "native": "Српски", "flag": "🇷🇸"},
-    "slovenian": {"code": "sl", "name": "Slovenian", "native": "Slovenščina", "flag": "🇸🇮"},
-    "slovak": {"code": "sk", "name": "Slovak", "native": "Slovenčina", "flag": "🇸🇰"},
-    "lithuanian": {"code": "lt", "name": "Lithuanian", "native": "Lietuvių", "flag": "🇱🇹"},
-    "latvian": {"code": "lv", "name": "Latvian", "native": "Latviešu", "flag": "🇱🇻"},
-    "estonian": {"code": "et", "name": "Estonian", "native": "Eesti", "flag": "🇪🇪"},
+    "english": {"code": "en", "name": "English", "native": "Tiếng Anh", "flag": "🇺🇸"},
+    "chinese": {"code": "zh-cn", "name": "Chinese (Simplified)", "native": "Tiếng Trung (Giản thể)", "flag": "🇨🇳"},
+    "chinese_traditional": {"code": "zh-tw", "name": "Chinese (Traditional)", "native": "Tiếng Trung (Phồn thể)", "flag": "🇹🇼"},
+    "japanese": {"code": "ja", "name": "Japanese", "native": "Tiếng Nhật", "flag": "🇯🇵"},
+    "korean": {"code": "ko", "name": "Korean", "native": "Tiếng Hàn", "flag": "🇰🇷"},
+    "french": {"code": "fr", "name": "French", "native": "Tiếng Pháp", "flag": "🇫🇷"},
+    "spanish": {"code": "es", "name": "Spanish", "native": "Tiếng Tây Ban Nha", "flag": "🇪🇸"},
+    "german": {"code": "de", "name": "German", "native": "Tiếng Đức", "flag": "🇩🇪"},
+    "italian": {"code": "it", "name": "Italian", "native": "Tiếng Ý", "flag": "🇮🇹"},
+    "portuguese": {"code": "pt", "name": "Portuguese", "native": "Tiếng Bồ Đào Nha", "flag": "🇵🇹"},
+    "russian": {"code": "ru", "name": "Russian", "native": "Tiếng Nga", "flag": "🇷🇺"},
+    "arabic": {"code": "ar", "name": "Arabic", "native": "Tiếng Ả Rập", "flag": "🇸🇦"},
+    "thai": {"code": "th", "name": "Thai", "native": "Tiếng Thái", "flag": "🇹🇭"},
+    "hindi": {"code": "hi", "name": "Hindi", "native": "Tiếng Hindi", "flag": "🇮🇳"},
+    "indonesian": {"code": "id", "name": "Indonesian", "native": "Tiếng Indonesia", "flag": "🇮🇩"},
+    "malaysian": {"code": "ms", "name": "Malaysian", "native": "Tiếng Malaysia", "flag": "🇲🇾"},
+    "dutch": {"code": "nl", "name": "Dutch", "native": "Tiếng Hà Lan", "flag": "🇳🇱"},
+    "swedish": {"code": "sv", "name": "Swedish", "native": "Tiếng Thụy Điển", "flag": "🇸🇪"},
+    "norwegian": {"code": "no", "name": "Norwegian", "native": "Tiếng Na Uy", "flag": "🇳🇴"},
+    "danish": {"code": "da", "name": "Danish", "native": "Tiếng Đan Mạch", "flag": "🇩🇰"},
+    "polish": {"code": "pl", "name": "Polish", "native": "Tiếng Ba Lan", "flag": "🇵🇱"},
+    "czech": {"code": "cs", "name": "Czech", "native": "Tiếng Séc", "flag": "🇨🇿"},
+    "hungarian": {"code": "hu", "name": "Hungarian", "native": "Tiếng Hungary", "flag": "🇭🇺"},
+    "turkish": {"code": "tr", "name": "Turkish", "native": "Tiếng Thổ Nhĩ Kỳ", "flag": "🇹🇷"},
+    "greek": {"code": "el", "name": "Greek", "native": "Tiếng Hy Lạp", "flag": "🇬🇷"},
+    "hebrew": {"code": "he", "name": "Hebrew", "native": "Tiếng Do Thái", "flag": "🇮🇱"},
+    "finnish": {"code": "fi", "name": "Finnish", "native": "Tiếng Phần Lan", "flag": "🇫🇮"},
+    "ukrainian": {"code": "uk", "name": "Ukrainian", "native": "Tiếng Ukraina", "flag": "🇺🇦"},
+    "bulgarian": {"code": "bg", "name": "Bulgarian", "native": "Tiếng Bulgaria", "flag": "🇧🇬"},
+    "romanian": {"code": "ro", "name": "Romanian", "native": "Tiếng Rumani", "flag": "🇷🇴"},
+    "croatian": {"code": "hr", "name": "Croatian", "native": "Tiếng Croatia", "flag": "🇭🇷"},
+    "serbian": {"code": "sr", "name": "Serbian", "native": "Tiếng Serbia", "flag": "🇷🇸"},
+    "slovenian": {"code": "sl", "name": "Slovenian", "native": "Tiếng Slovenia", "flag": "🇸🇮"},
+    "slovak": {"code": "sk", "name": "Slovak", "native": "Tiếng Slovakia", "flag": "🇸🇰"},
+    "lithuanian": {"code": "lt", "name": "Lithuanian", "native": "Tiếng Litva", "flag": "🇱🇹"},
+    "latvian": {"code": "lv", "name": "Latvian", "native": "Tiếng Latvia", "flag": "🇱🇻"},
+    "estonian": {"code": "et", "name": "Estonian", "native": "Tiếng Estonia", "flag": "🇪🇪"},
 }
 
 # Global variables cho task tracking
@@ -125,6 +123,19 @@ def heartbeat(task_id):
         except:
             break
         socketio.sleep(20)
+        
+def check_cancellation(task_id):
+    """Check if task should be cancelled and raise if so"""
+    if cancel_flags.get(task_id):
+        logger.info(f"Task {task_id} cancellation detected")
+        raise InterruptedError(f"Task {task_id} was cancelled")
+
+def emit_with_cancel_check(task_id, *args, **kwargs):
+    """Emit progress and check for cancellation"""
+    check_cancellation(task_id)
+    socketio.emit(*args, **kwargs)
+    socketio.sleep(0)
+    check_cancellation(task_id)
 
 class CancellableWhisperModel:
     """Wrapper cho Whisper model với khả năng cancel sử dụng eventlet"""
@@ -139,7 +150,7 @@ class CancellableWhisperModel:
     def transcribe(self, *args, **kwargs):
         """Transcribe với progress tracking dựa trên timeline"""
         if cancel_flags.get(self.task_id):
-            raise InterruptedError("Task was cancelled")
+            raise InterruptedError("Task was cancelled before transcription")
             
         self.start_time = time.time()
         
@@ -159,7 +170,8 @@ class CancellableWhisperModel:
             for segment in segments_gen:
                 # Check cancellation
                 if cancel_flags.get(self.task_id):
-                    raise InterruptedError("Task was cancelled")
+                    logger.info(f"Transcription cancelled at segment {len(segments)}")
+                    raise InterruptedError("Task was cancelled during transcription")
                 
                 # faster-whisper segment có attributes: start, end, text
                 segments.append({
@@ -563,6 +575,7 @@ def process_video_task_enhanced(
 
         def emit_step_progress(step_id, step_progress, message, force_emit=False, **kwargs):
             """Enhanced emit function with better reliability"""
+            check_cancellation(task_id)
             if cancel_flags.get(task_id):
                 raise InterruptedError("Task cancelled")
 
@@ -614,6 +627,8 @@ def process_video_task_enhanced(
             try:
                 # Emit to specific room
                 socketio.emit("progress_update", progress_data, room=task_id)
+                socketio.sleep(0)
+                check_cancellation(task_id)
                 processing_tasks[task_id]["message"] = message
                 # Log the emission for debugging
                 logger.info(f"[{task_id}] {step_id} {step_progress}% - {message}")
@@ -860,9 +875,6 @@ def process_video_task_enhanced(
         }
 
         socketio.emit("task_completed", completion_data, room=task_id)
-        socketio.emit(
-            "task_completed_broadcast", {**completion_data, "broadcast": True}
-        )
         socketio.sleep(0.5)
         logger.info(f"Task {task_id} completed successfully with enhanced translation")
         # Log final API status
@@ -959,28 +971,32 @@ def handle_cancel_task(data):
         emit("error", {"message": "Task not found"}, room=request.sid)
         return
     
+    current_status = processing_tasks[task_id]["status"]
+    
+    # ALLOW CANCEL EVEN IF ALREADY CANCELLING (in case first attempt didn't work)
+    if current_status not in ["queued", "processing", "cancelling"]:  # Add "cancelling" here
+        emit("cancel_result", {
+            "task_id": task_id,
+            "success": False,
+            "message": f"Cannot cancel task with status: {current_status}"
+        }, room=request.sid)
+        return
+    
     # Set cancel flag
     cancel_flags[task_id] = True
     
     # Update task status
-    if processing_tasks[task_id]["status"] == "processing":
-        processing_tasks[task_id]["status"] = "cancelling"
-        processing_tasks[task_id]["cancel_time"] = datetime.now()
-        
-        # Emit cancellation acknowledgment
-        emit("cancel_acknowledged", {
-            "task_id": task_id,
-            "message": "Cancellation request received, stopping task...",
-            "status": "cancelling"
-        }, room=task_id)
-        
-        logger.info(f"Task {task_id} marked for cancellation")
-    else:
-        emit("cancel_result", {
-            "task_id": task_id,
-            "success": False,
-            "message": f"Cannot cancel task with status: {processing_tasks[task_id]['status']}"
-        }, room=request.sid)
+    processing_tasks[task_id]["status"] = "cancelling"
+    processing_tasks[task_id]["cancel_time"] = datetime.now()
+    
+    # Emit acknowledgment
+    emit("cancel_acknowledged", {
+        "task_id": task_id,
+        "message": "Cancellation request received, stopping task...",
+        "status": "cancelling"
+    }, room=task_id)
+    
+    logger.info(f"Task {task_id} marked for cancellation (was {current_status})")
 
 
 # Flask routes
@@ -1174,6 +1190,15 @@ def cancel_all_tasks():
             "message": f"Error cancelling tasks: {str(e)}"
         }), 500
 
+@app.route("/api/task_cancel_status/<task_id>")
+def get_cancel_status(task_id):
+    """Debug endpoint to check cancel status"""
+    return jsonify({
+        "task_id": task_id,
+        "cancel_flag": cancel_flags.get(task_id, False),
+        "task_exists": task_id in processing_tasks,
+        "task_status": processing_tasks.get(task_id, {}).get("status", "unknown")
+    })
 
 @app.route("/download/<path:filename>")
 def download_file(filename):
@@ -1239,14 +1264,10 @@ def validate_api_keys():
                 # Quick validation
                 import google.generativeai as genai
                 genai.configure(api_key=key)
-                model = genai.GenerativeModel("gemini-1.5-pro")
+                model = genai.GenerativeModel("gemini-2.5-flash")
                 
                 # Small test request
-                response = model.generate_content("Hello", 
-                    generation_config=genai.types.GenerationConfig(
-                        max_output_tokens=10,
-                        temperature=0
-                    ))
+                response = model.generate_content("Hello")
                 
                 if _extract_response_text(response):
                     valid_keys.append(f"Key {i+1}: ...{key[-8:]}")
@@ -1282,34 +1303,34 @@ def _extract_response_text(response) -> str:
         Safely extract text from Gemini response (multi-part supported).
         """
         try:
-            # Method 1: Preferred - candidates[0].content.parts
+            finish_reason = getattr(getattr(response, "candidates", [None])[0], "finish_reason", None)
+            if finish_reason:
+                logger.debug(f"Response finish reason: {finish_reason}")
+                
+            if finish_reason and finish_reason.value in [2, 3]: # STOP (2) hoặc SAFETY (3)
+                logger.warning(f"Gemini finished with reason {finish_reason.value}. Checking prompt_feedback...")
+                
+                # Kiểm tra phản hồi bị chặn
+                if hasattr(response, "prompt_feedback") and hasattr(response.prompt_feedback, "block_reason"):
+                    logger.warning(f"Response blocked: {getattr(response.prompt_feedback.block_reason, 'name', 'N/A')}")
+                return ""
+
+
+            # Logic trích xuất chính: CHỈ lặp qua candidates/parts
             if hasattr(response, "candidates") and response.candidates:
                 candidate = response.candidates[0]
-                if hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
+                content = getattr(candidate, "content", None)
+                
+                if content and hasattr(content, "parts"):
                     text_parts = []
-                    for part in candidate.content.parts:
-                        # part có thể là dict hoặc object
-                        if isinstance(part, dict) and "text" in part:
-                            text_parts.append(part["text"])
-                        elif hasattr(part, "text") and part.text:
-                            text_parts.append(part.text)
+                    for part in content.parts:
+                        # Dùng getattr an toàn để trích xuất text
+                        text = getattr(part, "text", "") 
+                        if text:
+                            text_parts.append(text)
+                    
                     if text_parts:
                         return "\n".join(text_parts)
-
-            # Method 2: Direct parts (nếu SDK trả về trực tiếp)
-            if hasattr(response, "parts"):
-                text_parts = []
-                for part in response.parts:
-                    if isinstance(part, dict) and "text" in part:
-                        text_parts.append(part["text"])
-                    elif hasattr(part, "text") and part.text:
-                        text_parts.append(part.text)
-                if text_parts:
-                    return "\n".join(text_parts)
-
-            # Method 3: Fallback simple text
-            if hasattr(response, "text"):
-                return getattr(response, "text", "")
 
             logger.error(f"Could not extract text from Gemini response. Raw: {response}")
             return ""
@@ -1485,6 +1506,189 @@ def api_languages():
     """API endpoint for supported languages"""
     return jsonify(SUPPORTED_LANGUAGES)
 
+@app.route("/api/download_youtube", methods=["POST"])
+def download_youtube_video_api():
+    """API endpoint to download YouTube video"""
+    try:
+        data = request.get_json()
+        video_url = data.get("video_url")
+        
+        if not video_url:
+            return jsonify({
+                "success": False,
+                "message": "Video URL is required"
+            }), 400
+        
+        # Generate task ID for tracking
+        task_id = hashlib.md5(f"{datetime.now().isoformat()}{video_url}".encode()).hexdigest()
+        
+        # Initialize task
+        processing_tasks[task_id] = {
+            "status": "downloading",
+            "start_time": datetime.now(),
+            "video_url": video_url,
+            "type": "youtube_download"
+        }
+        
+        # Start download in background
+        socketio.start_background_task(
+            download_youtube_task,
+            task_id,
+            video_url
+        )
+        
+        return jsonify({
+            "success": True,
+            "task_id": task_id,
+            "message": "Download started"
+        })
+        
+    except Exception as e:
+        logger.error(f"YouTube download API error: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"Error: {str(e)}"
+        }), 500
+        
+def download_youtube_task(task_id, video_url):
+    """Background task for YouTube download with progress tracking"""
+    try:
+        output_dir = os.path.join(OUTPUT_FOLDER, "youtube_downloads")
+        os.makedirs(output_dir, exist_ok=True)
+        
+        def progress_hook(d):
+            if cancel_flags.get(task_id):
+                raise InterruptedError("Download cancelled")
+                
+            if d["status"] == "downloading":
+                try:
+                    # Extract progress information
+                    downloaded = d.get("downloaded_bytes", 0)
+                    total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
+                    speed = d.get("speed", 0)
+                    eta = d.get("eta", 0)
+                    
+                    progress = 0
+                    if total > 0:
+                        progress = (downloaded / total) * 100
+                    
+                    # Format speed
+                    speed_str = ""
+                    if speed:
+                        if speed > 1024 * 1024:
+                            speed_str = f"{speed / (1024 * 1024):.2f} MB/s"
+                        else:
+                            speed_str = f"{speed / 1024:.2f} KB/s"
+                    
+                    # Emit progress
+                    socketio.emit("download_progress", {
+                        "task_id": task_id,
+                        "status": "downloading",
+                        "progress": round(progress, 1),
+                        "downloaded": downloaded,
+                        "total": total,
+                        "speed": speed_str,
+                        "eta": eta,
+                        "message": f"Downloading... {progress:.1f}%"
+                    }, room=task_id)
+                    
+                    socketio.sleep(0)
+                    
+                except Exception as e:
+                    logger.warning(f"Progress hook error: {e}")
+        
+        # Download options
+        ydl_opts = {
+            "format": "best[height<=1080]",
+            "outtmpl": os.path.join(output_dir, "%(title)s.%(ext)s"),
+            "progress_hooks": [progress_hook],
+            "ignoreerrors": False,
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            if cancel_flags.get(task_id):
+                raise InterruptedError("Download cancelled")
+                
+            # Extract info
+            info = ydl.extract_info(video_url, download=True)
+            
+            if info:
+                filename = ydl.prepare_filename(info)
+                file_size = os.path.getsize(filename)
+                
+                # Update task
+                processing_tasks[task_id]["status"] = "completed"
+                processing_tasks[task_id]["filename"] = os.path.basename(filename)
+                processing_tasks[task_id]["filepath"] = filename
+                processing_tasks[task_id]["title"] = info.get("title", "Unknown")
+                processing_tasks[task_id]["file_size"] = file_size
+                processing_tasks[task_id]["duration"] = info.get("duration", 0)
+                
+                # Emit completion
+                socketio.emit("download_progress", {
+                    "task_id": task_id,
+                    "status": "completed",
+                    "progress": 100,
+                    "filename": os.path.basename(filename),
+                    "download_url": f"/download_youtube/{task_id}",
+                    "title": info.get("title", "Unknown"),
+                    "file_size": file_size,
+                    "message": "Download completed successfully!"
+                }, room=task_id)
+                
+                logger.info(f"YouTube download completed: {filename}")
+                
+    except InterruptedError:
+        logger.info(f"YouTube download cancelled: {task_id}")
+        processing_tasks[task_id]["status"] = "cancelled"
+        socketio.emit("download_progress", {
+            "task_id": task_id,
+            "status": "cancelled",
+            "message": "Download was cancelled"
+        }, room=task_id)
+        
+    except Exception as e:
+        logger.error(f"YouTube download error: {e}")
+        processing_tasks[task_id]["status"] = "error"
+        socketio.emit("download_progress", {
+            "task_id": task_id,
+            "status": "error",
+            "message": f"Download failed: {str(e)}"
+        }, room=task_id)
+
+
+@app.route("/download_youtube/<task_id>")
+def download_youtube_file(task_id):
+    """Download the completed YouTube video"""
+    try:
+        if task_id not in processing_tasks:
+            return jsonify({"error": "Task not found"}), 404
+        
+        task = processing_tasks[task_id]
+        
+        if task["status"] != "completed":
+            return jsonify({"error": "Download not completed"}), 400
+        
+        filepath = task.get("filepath")
+        if not filepath or not os.path.exists(filepath):
+            return jsonify({"error": "File not found"}), 404
+        
+        return send_file(
+            filepath,
+            as_attachment=True,
+            download_name=task.get("filename", "video.mp4")
+        )
+        
+    except Exception as e:
+        logger.error(f"File download error: {e}")
+        return jsonify({"error": "Download failed"}), 500
+
+@app.route("/youtube_downloader", methods=["GET"])
+def youtube_downloader():
+    """Page to download YouTube videos only (no subtitle processing)"""
+    return render_template("youtube_downloader.html")
+
+# SocketIO event for YouTube download
 
 if __name__ == "__main__":
     # Initialize logging

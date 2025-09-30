@@ -128,6 +128,9 @@
 			</div>
 		</header>
 		<div class="mb-2 flex justify-end space-x-4">
+			<a href="/youtube_downloader" class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
+				<i class="fas fa-download mr-2"></i>Youtube Downloader
+			</a>
 			<a href="/history" class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
 				<i class="fas fa-history mr-2"></i>History
 			</a>
@@ -628,9 +631,13 @@
 
 				<!-- Action Buttons -->
 				<div x-show="currentStep.overall_progress < 100" class="flex justify-center space-x-4">
-					<button @click="cancelProcessing()"
+					<button x-show="currentStep.status !== 'cancelled'" @click="cancelProcessing()"
 						class="px-6 py-3 bg-red-500/20 border border-red-400/30 rounded-lg text-red-400 hover:bg-red-500/30 transition-colors flex items-center">
 						<i class="fas fa-stop mr-2"></i>Cancel Processing
+					</button>
+					<button x-show="currentStep.status === 'cancelled'" @click="submitForm()"
+						class="px-6 py-3 bg-green-500/20 border border-green-400/30 rounded-lg text-green-400 hover:bg-green-500/30 transition-colors flex items-center">
+						<i class="fas fa-refresh mr-2"></i>Restart task
 					</button>
 
 					<!-- Minimize Button -->
@@ -920,15 +927,6 @@
 								this.handleProgressUpdate(data);
 							});
 
-							// Backup broadcast listener
-							this.socket.on("progress_update_broadcast", (data) => {
-								console.log("📡 Progress broadcast received:", data);
-								this.lastProgressUpdate = Date.now();
-								if (!this.roomJoined) {
-									console.warn("⚠️ Using broadcast because room not joined");
-									this.handleProgressUpdate(data);
-								}
-							});
 
 							this.socket.on("task_completed", (data) => {
 								console.log("✅ Task completed:", data);
@@ -940,8 +938,8 @@
 								this.addLog("info", data.message);
 							});
 
-							this.socket.on("test_message", (data) => {
-								console.log("📋 Test test:", data);
+							this.socket.on("cancel_acknowledged", (data) => {
+								console.log("📋 Cancel acknowledged status:", data);
 								this.addLog("info", data.message);
 							});
 
@@ -1537,43 +1535,38 @@
 						this.lastProgressUpdate = null;
 					},
 
-					cancelProcessing() {
+					async cancelProcessing() {
 						if (confirm("Are you sure you want to cancel processing?")) {
-							this.processing = false;
-							this.stopProcessingTimer();
-
-							if (this.currentTaskId) {
-								this.socket.emit("leave_task", { task_id: this.currentTaskId });
+							this.addLog("warning", "Sending cancellation request...");
+							
+							// Send cancel via WebSocket
+							if (this.socket && this.socket.connected && this.currentTaskId) {
+								this.socket.emit("cancel_task", { task_id: this.currentTaskId });
 							}
-
-							// Reset states
+							
+							// Also send via HTTP API as backup
+							if (this.currentTaskId) {
+								try {
+									await fetch(`/api/cancel_task/${this.currentTaskId}`, {
+										method: 'POST'
+									});
+								} catch (error) {
+									console.error("Cancel API error:", error);
+								}
+							}
+							
+							// Update UI immediately
 							this.processingSteps.forEach((step) => {
 								if (step.status === "processing") {
 									step.status = "cancelled";
 								}
 							});
-
+							
 							this.currentStep = {
-								step: "cancelled",
-								step_name: "Cancelled",
-								step_progress: 0,
-								overall_progress: 0,
-								message: "Processing cancelled",
-								elapsed_time: this.currentStep.elapsed_time,
-								remaining_time: null,
+								...this.currentStep,
 								status: "cancelled",
+								message: "Cancellation requested..."
 							};
-							this.progressTranslations = [];
-							this.elapsedTime = 0;
-
-							try {
-								const res = fetch('/api/cancel_all_tasks', {
-									method: 'POST'
-								})
-
-							} catch { }
-
-							this.addLog("warning", "Processing cancelled by user");
 						}
 					},
 

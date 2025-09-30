@@ -5,7 +5,7 @@ services:
   subtitle-webapp:
     build:
       context: .
-      dockerfile: Dockerfile.webapp
+      dockerfile: Dockerfile
     container_name: subtitle-webapp
     ports:
       - "5050:5050"

@@ -2,25 +2,13 @@ from faster_whisper import WhisperModel
 import os
 import re
 import time
-import asyncio
 import concurrent.futures
-from datetime import timedelta
-from pathlib import Path
-import argparse
 import logging
 import google.generativeai as genai
-from typing import List, Dict, Optional, Tuple
-import threading
-from queue import Queue
-import psutil
 import hashlib
 import pickle
-import json
-from flask import Flask, request, jsonify, render_template_string, send_file
-from werkzeug.utils import secure_filename
 import random
 from dataclasses import dataclass
-import backoff
 
 # Enhanced logging setup
 logging.basicConfig(

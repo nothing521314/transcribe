@@ -180,6 +180,12 @@ class EnhancedTranslationManager:
         """
         if not self.gemini_keys:
             return texts, False
+
+        from web_app import cancel_flags
+        
+        if self.current_task_id and cancel_flags.get(self.current_task_id):
+            logger.info(f"Gemini translation cancelled before starting")
+            return texts, False
         
         # Language mapping
         lang_mapping = {
@@ -229,6 +235,9 @@ class EnhancedTranslationManager:
         
         # Try each available API key
         for attempt in range(self.max_retries):
+            if self.current_task_id and cancel_flags.get(self.current_task_id):
+                logger.info(f"Gemini translation cancelled at retry {attempt}")
+                return texts, False
             key_info = self.get_available_gemini_key()
             
             if not key_info:
@@ -272,6 +281,9 @@ Return ONLY the translations numbered 1-{len(texts)}."""
 
                 logger.info(f"Translating batch of {len(texts)} texts to {target_language} using {key_info.short_key}")
                 
+                if self.current_task_id and cancel_flags.get(self.current_task_id):
+                    logger.info("Cancelled before Gemini API call")
+                    return texts, False
                 # Make API request with timeout
                 response = model.generate_content(
                     prompt,
@@ -282,6 +294,10 @@ Return ONLY the translations numbered 1-{len(texts)}."""
                         top_k=40
                     )
                 )
+                
+                if self.current_task_id and cancel_flags.get(self.current_task_id):
+                    logger.info("Cancelled after Gemini API call")
+                    return texts, False
                 # FIX: Truy cập response text một cách an toàn
                 response_text = self._extract_response_text(response)
             
@@ -341,6 +357,8 @@ Return ONLY the translations numbered 1-{len(texts)}."""
         if not self.google_translator:
             logger.warning("Google Translate not available")
             return texts
+
+        from web_app import cancel_flags
         
         # Language code mapping
         lang_codes = {
@@ -361,8 +379,14 @@ Return ONLY the translations numbered 1-{len(texts)}."""
         logger.info(f"Using Google Translate fallback for {len(texts)} texts to {target_language}")
         
         translations = []
-        for text in texts:
+        for i, text in enumerate(texts):
             try:
+                if self.current_task_id and cancel_flags.get(self.current_task_id):
+                    logger.info(f"Google Translate cancelled at text {i}/{len(texts)}")
+                    # Return what we have + originals for rest
+                    remaining = texts[len(translations):]
+                    translations.extend(remaining)
+                    break
                 if not text.strip():
                     translations.append("")
                     continue
@@ -372,6 +396,15 @@ Return ONLY the translations numbered 1-{len(texts)}."""
                 
                 # Small delay to avoid rate limiting
                 time.sleep(0.1)
+                
+                if i % 10 == 0 or i == len(texts) - 1:
+                    progress = (i + 1) / len(texts)
+                    self.emit_progress(
+                        "translation",
+                        f"Google Translate: {i+1}/{len(texts)} texts",
+                        progress,
+                        target_language
+                    )
                 
             except Exception as e:
                 logger.warning(f"Google Translate error for text '{text[:50]}...': {e}")
@@ -387,22 +420,26 @@ Return ONLY the translations numbered 1-{len(texts)}."""
         """
         if not texts:
             return []
-        
         logger.info(f"Starting translation of {len(texts)} texts to {target_language}")
-        
+        from web_app import cancel_flags  # Import here to avoid circular import at module level
         # Process in batches
         all_translations = []
         total_batches = (len(texts) + self.batch_size - 1) // self.batch_size
-        
         for batch_idx in range(total_batches):
+            # Cancel check before each batch
+            if self.current_task_id and cancel_flags.get(self.current_task_id):
+                logger.info(f"Translation cancelled for task {self.current_task_id}")
+                remaining = texts[len(all_translations):]
+                all_translations.extend(remaining)
+                break
             start_idx = batch_idx * self.batch_size
             end_idx = min(start_idx + self.batch_size, len(texts))
             batch_texts = texts[start_idx:end_idx]
-            
+
             batch_progress = (batch_idx + 1) / total_batches
-            
+
             logger.info(f"Processing batch {batch_idx + 1}/{total_batches} ({len(batch_texts)} texts)")
-            
+
             # Emit progress BEFORE processing
             self.emit_progress(
                 "translation",
@@ -411,14 +448,32 @@ Return ONLY the translations numbered 1-{len(texts)}."""
                 target_language,
             )
             
+            if self.current_task_id and cancel_flags.get(self.current_task_id):
+                logger.info(f"Translation cancelled before processing batch {batch_idx+1}")
+                remaining = texts[len(all_translations):]
+                all_translations.extend(remaining)
+                return all_translations
+
             # Try Gemini first
             translations, success = self.translate_batch_with_gemini(
                 batch_texts, target_language, context
             )
             
+            if self.current_task_id and cancel_flags.get(self.current_task_id):
+                logger.info(f"Translation cancelled after Gemini batch {batch_idx+1}")
+                all_translations.extend(translations)
+                remaining = texts[len(all_translations):]
+                all_translations.extend(remaining)
+                return all_translations
+
             if not success:
                 logger.warning(f"Gemini translation failed for batch {batch_idx + 1}, trying Google Translate")
-                
+                if self.current_task_id and cancel_flags.get(self.current_task_id):
+                    logger.info(f"Translation cancelled before Google Translate fallback")
+                    all_translations.extend(batch_texts)  # Use originals
+                    remaining = texts[len(all_translations):]
+                    all_translations.extend(remaining)
+                    return all_translations
                 # Emit fallback notification
                 self.emit_progress(
                     "translation",
@@ -426,16 +481,26 @@ Return ONLY the translations numbered 1-{len(texts)}."""
                     batch_progress,
                     target_language,
                 )
-                
+
                 translations = self.translate_batch_with_google(batch_texts, target_language)
-            
+
             all_translations.extend(translations)
             
+            if self.current_task_id and cancel_flags.get(self.current_task_id):
+                logger.info(f"Translation cancelled after batch {batch_idx+1} completed")
+                remaining = texts[len(all_translations):]
+                all_translations.extend(remaining)
+                return all_translations
+
             # Small delay between batches
             if batch_idx < total_batches - 1:
                 import eventlet
                 eventlet.sleep(0.5)
-        
+            if self.current_task_id and cancel_flags.get(self.current_task_id):
+                logger.info(f"Translation cancelled after batch {batch_idx+1}")
+                remaining = texts[len(all_translations):]
+                all_translations.extend(remaining)
+                break
         # Final completion emit
         self.emit_progress(
             "translation",
@@ -443,7 +508,6 @@ Return ONLY the translations numbered 1-{len(texts)}."""
             1.0,
             target_language,
         )
-        
         logger.info(f"Translation completed: {len(all_translations)} results")
         return all_translations
     
