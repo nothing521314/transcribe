@@ -1,44 +1,35 @@
 # web_app.py
-from typing import List, Dict, Optional
+from typing import List, Dict
 import os
 import hashlib
 import eventlet
-import json
 import pickle
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlparse
-import requests
 from flask import (
     Flask,
     render_template,
     request,
     jsonify,
     send_file,
-    redirect,
-    url_for,
-    session,
-    flash,
 )
-from flask_socketio import SocketIO, emit, join_room, leave_room, rooms
+from flask_socketio import SocketIO, emit, join_room, leave_room
 from werkzeug.utils import secure_filename
-import threading
 import time
 import logging
-import asyncio
-import concurrent.futures
-from queue import Queue
 
 # Import enhanced modules
-from video_subtitle_processor import VideoSubtitleProcessor, OptimizedVideoSubtitleProcessor
+from video_subtitle_processor import OptimizedVideoSubtitleProcessor
 from enhanced_translation_manager import EnhancedTranslationManager
 import yt_dlp
+from io import StringIO
+import sys
 
 # Enhanced logging setup
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler(), logging.FileHandler("logs/app.log")],
+    handlers=[logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
@@ -54,6 +45,8 @@ socketio = SocketIO(
     async_mode="eventlet",
     ping_timeout=300,
     ping_interval=25,
+    always_connect=True,
+    transports=['websocket', 'polling'],
 )
 
 # Cấu hình
@@ -116,21 +109,231 @@ SUPPORTED_LANGUAGES = {
 
 # Global variables cho task tracking
 processing_tasks = {}
+task_processors = {}  # Store processor instances for cancellation
+task_threads = {}     # Store thread references for cancellation
+cancel_flags = {}     # Global cancel flags
 translation_managers = {}  # Cache translation managers
 
+def heartbeat(task_id):
+    """Optimized heartbeat với flush"""
+    while processing_tasks.get(task_id, {}).get("status") == "processing":
+        if cancel_flags.get(task_id):
+            break
+        try:
+            socketio.emit("keep_alive", {"task_id": task_id}, room=task_id)
+            socketio.sleep(0)
+        except:
+            break
+        socketio.sleep(20)
+
+class CancellableWhisperModel:
+    """Wrapper cho Whisper model với khả năng cancel sử dụng eventlet"""
+    
+    def __init__(self, model, task_id):
+        self.model = model
+        self.task_id = task_id
+        self.socketio = socketio
+        self.last_progress_time = 0
+        self.start_time = None
+        
+    def transcribe(self, *args, **kwargs):
+        """Transcribe với progress tracking dựa trên timeline"""
+        if cancel_flags.get(self.task_id):
+            raise InterruptedError("Task was cancelled")
+            
+        self.start_time = time.time()
+        
+        # Lấy audio path và duration
+        audio_path = args[0] if args else kwargs.get('audio')
+        total_duration = self._get_audio_duration(audio_path)
+        
+        try:
+            # faster-whisper trả về (segments_generator, info)
+            segments_gen, info = self.model.transcribe(*args, **kwargs)
+            
+            segments = []
+            last_emit_time = time.time()
+            last_progress = 0
+            
+            # Iterate qua generator để track progress theo timeline
+            for segment in segments_gen:
+                # Check cancellation
+                if cancel_flags.get(self.task_id):
+                    raise InterruptedError("Task was cancelled")
+                
+                # faster-whisper segment có attributes: start, end, text
+                segments.append({
+                    'start': segment.start,
+                    'end': segment.end,
+                    'text': segment.text,
+                })
+                
+                current_time = time.time()
+                
+                # Tính progress dựa trên timeline
+                if total_duration > 0:
+                    # Sử dụng end time của segment hiện tại làm progress
+                    timeline_progress = min((segment.end / total_duration) * 95, 95)
+                else:
+                    # Fallback: dựa trên info.duration nếu có
+                    if hasattr(info, 'duration') and info.duration > 0:
+                        timeline_progress = min((segment.end / info.duration) * 95, 95)
+                    else:
+                        # Last resort: time-based estimate
+                        elapsed = current_time - self.start_time
+                        timeline_progress = min((elapsed / 60) * 90, 90)
+                
+                # Emit có điều kiện thông minh
+                should_emit = (
+                    len(segments) == 1 or  # First segment
+                    timeline_progress >= last_progress + 5 or  # Every 5% progress
+                    current_time - last_emit_time >= 3 or  # Every 3 seconds minimum
+                    timeline_progress >= 90  # Near completion
+                )
+                
+                if should_emit:
+                    self.emit_transcription_progress_timeline(
+                        timeline_progress, 
+                        current_time=segment.end,
+                        total_duration=total_duration or (info.duration if hasattr(info, 'duration') else 0),
+                        segment_count=len(segments)
+                    )
+                    last_emit_time = current_time
+                    last_progress = timeline_progress
+                
+                # Yield control
+                eventlet.sleep(0)
+            
+            # Final progress
+            final_duration = info.duration if hasattr(info, 'duration') else total_duration
+            self.emit_transcription_progress_timeline(
+                100, 
+                current_time=final_duration,
+                total_duration=final_duration,
+                segment_count=len(segments)
+            )
+            
+            # Return compatible format
+            result = {
+                'segments': segments,
+                'language': info.language,
+                'language_probability': info.language_probability,
+                'duration': info.duration,
+            }
+            
+            logger.info(f"Transcription completed: {len(segments)} segments, {info.duration:.1f}s duration")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Transcription error: {e}")
+            raise
+
+    def _get_audio_duration(self, audio_path: str) -> float:
+        """Lấy duration của audio/video file"""
+        try:
+            import subprocess
+            import json
+            
+            # Sử dụng ffprobe để lấy duration chính xác
+            cmd = [
+                'ffprobe', '-v', 'quiet', '-print_format', 'json',
+                '-show_format', audio_path
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0:
+                data = json.loads(result.stdout)
+                duration = float(data['format']['duration'])
+                logger.info(f"Audio duration: {duration:.1f}s")
+                return duration
+            else:
+                logger.warning(f"ffprobe failed: {result.stderr}")
+                
+        except Exception as e:
+            logger.warning(f"Could not get audio duration: {e}")
+        
+        # Fallback: estimate từ file size (rough)
+        try:
+            file_size_mb = os.path.getsize(audio_path) / (1024 * 1024)
+            # Very rough estimate: 1MB ≈ 10-15 seconds for compressed video
+            estimated_duration = file_size_mb * 12
+            logger.info(f"Estimated duration: {estimated_duration:.1f}s from file size")
+            return estimated_duration
+        except:
+            return 0
+
+    def emit_transcription_progress_timeline(self, progress, current_time=0, total_duration=0, segment_count=0):
+        """Emit progress với timeline information"""
+        current_timestamp = time.time()
+        elapsed = current_timestamp - self.start_time if self.start_time else 0
+        
+        if self.socketio and self.task_id:
+            try:
+                progress = round(progress, 1)
+                
+                # Tạo message với timeline info
+                if total_duration > 0 and current_time > 0:
+                    time_str = f"{current_time:.1f}s/{total_duration:.1f}s"
+                    message = f"Transcribing... {progress:.0f}% ({time_str}, {segment_count} segments)"
+                elif segment_count > 0:
+                    message = f"Transcribing... {progress:.0f}% ({segment_count} segments)"
+                else:
+                    message = f"Transcribing... {progress:.0f}%"
+                
+                data = {
+                    "task_id": self.task_id,
+                    "step": "transcription", 
+                    "step_progress": min(progress, 100),
+                    "overall_progress": 20 + (min(progress, 100) * 0.4),
+                    "message": message,
+                    "status": "processing",
+                    "elapsed_time": round(elapsed, 1),
+                    "timeline_position": round(current_time, 1),
+                    "total_duration": round(total_duration, 1),
+                    "segment_count": segment_count,
+                }
+                
+                # Emit với aggressive flushing
+                self.socketio.emit("progress_update", data, room=self.task_id)
+                eventlet.sleep(0)
+                eventlet.sleep(0)
+                
+                # Log ít hơn để tránh spam
+                if progress % 10 == 0 or progress >= 100 or segment_count <= 3:
+                    logger.info(f"[TRANSCRIPTION] {self.task_id}: {progress:.0f}% at {current_time:.1f}s/{total_duration:.1f}s")
+                
+            except Exception as e:
+                logger.error(f"Failed to emit timeline progress: {e}")
 
 class EnhancedOptimizedVideoSubtitleProcessor(OptimizedVideoSubtitleProcessor):
     """Enhanced processor with intelligent API management and WebSocket integration"""
 
-    def __init__(self, model_size="base", gemini_api_keys=None, socketio=None):
+    def __init__(self, model_size="base", gemini_api_keys=None, socketio=None, task_id=None):
         super().__init__(model_size, gemini_api_keys, socketio)
+        
+        self.task_id = task_id
+        self.is_cancelled = False
+        
+        # Wrap model với cancellation support
+        if hasattr(self, 'model') and task_id:
+            self.model = CancellableWhisperModel(self.model, task_id)
+        
+        logger.info(f"Initialized enhanced processor with cancellation support for task {task_id}")
         
         # Enhanced logging for web app
         logger.info(f"🌐 Initialized enhanced web processor")
         logger.info(f"🔑 API Management: {len(gemini_api_keys or [])} keys")
-        
+
+    def check_cancellation(self):
+        """Check if task should be cancelled"""
+        if self.task_id and cancel_flags.get(self.task_id):
+            self.is_cancelled = True
+            raise InterruptedError(f"Task {self.task_id} was cancelled")
+
     def emit_translation_status(self, language: str, status: str, message: str, progress: int = None):
         """Emit translation status updates"""
+        self.check_cancellation()
         if self.socketio and self.current_task_id:
             data = {
                 'task_id': self.current_task_id,
@@ -150,6 +353,8 @@ class EnhancedOptimizedVideoSubtitleProcessor(OptimizedVideoSubtitleProcessor):
     def enhanced_parallel_translate(self, texts: List[str], target_languages: List[str], 
                                    task_id: str = None) -> Dict[str, List[str]]:
         """Enhanced parallel translation with detailed WebSocket updates"""
+        if task_id and cancel_flags.get(task_id):
+            raise InterruptedError("Task was cancelled before translation")
         if task_id:
             self.set_task_id(task_id)
         
@@ -159,8 +364,20 @@ class EnhancedOptimizedVideoSubtitleProcessor(OptimizedVideoSubtitleProcessor):
         
         def run_translation(language: str):
             try:
+                if task_id and cancel_flags.get(task_id):
+                    logger.info(f"Translation cancelled before starting {language}")
+                    with results_lock:
+                        results[language] = []
+                    return
+                self.translation_manager.set_task_id(task_id)
                 self.emit_translation_status(language, 'starting', f'Starting {language} translation...')
                 translations = self.translation_manager.translate_texts(texts, language)
+
+                if task_id and cancel_flags.get(task_id):
+                    logger.info(f"Translation for {language} completed but task was cancelled")
+                    with results_lock:
+                        results[language] = []
+                    return
 
                 api_status = self.translation_manager.get_api_status()
                 gemini_available = any(k['available'] for k in api_status['gemini_keys'])
@@ -172,16 +389,27 @@ class EnhancedOptimizedVideoSubtitleProcessor(OptimizedVideoSubtitleProcessor):
                                                 f'{language} completed successfully')
                 with results_lock:
                     results[language] = translations
+                    
+            except InterruptedError:
+                logger.info(f"Translation interrupted for {language}")
+                with results_lock:
+                    results[language] = []
             except Exception as e:
                 self.emit_translation_status(language, 'error', f'{language} failed: {e}')
                 with results_lock:
                     results[language] = texts
 
         for lang in target_languages:
+            if task_id and cancel_flags.get(task_id):
+                logger.info("Stopping translation launch due to cancellation")
+                break
             pool.spawn(run_translation, lang)
 
-        # Chờ toàn bộ green thread kết thúc
-        pool.waitall()
+        try:
+            pool.waitall()
+        except InterruptedError:
+            logger.info("Parallel translation cancelled")
+            raise
 
         # Sau khi join, bạn có thể phát tổng kết
         for lang, translated_texts in results.items():
@@ -216,6 +444,8 @@ def download_youtube_video(url, output_path, task_id=None):
     logger.info(f"Starting download from {url}")
 
     def progress_hook(d):
+        if cancel_flags.get(task_id):
+            raise InterruptedError("Download cancelled")
         if d["status"] == "downloading" and task_id:
             try:
                 percent_str = d.get("_percent_str", "0%")
@@ -231,7 +461,9 @@ def download_youtube_video(url, output_path, task_id=None):
                         "message": f"Downloading... {percent_str}",
                         "status": "processing",
                     },
+                    room=task_id
                 )
+                socketio.sleep(0)
             except Exception as e:
                 logger.warning(f"Progress hook error: {e}")
 
@@ -244,13 +476,17 @@ def download_youtube_video(url, output_path, task_id=None):
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            if cancel_flags.get(task_id):
+                raise InterruptedError("Download cancelled")
             info = ydl.extract_info(url, download=True)
 
             if info:
                 filename = ydl.prepare_filename(info)
                 logger.info(f"Download completed: {filename}")
                 return filename, info.get("title", "Unknown")
-
+    except InterruptedError:
+        logger.info(f"Download cancelled for task {task_id}")
+        raise
     except Exception as e:
         logger.error(f"Download error: {e}")
         return None, str(e)
@@ -287,11 +523,36 @@ def load_from_cache(file_hash, cache_type="transcription"):
         logger.error(f"Error loading cache: {e}")
     return None
 
+def cleanup_cancelled_task(task_id):
+    """Clean up resources for cancelled task"""
+    try:
+        # Clean up processor
+        if task_id in task_processors:
+            del task_processors[task_id]
+            
+        # Clean up thread reference
+        if task_id in task_threads:
+            del task_threads[task_id]
+            
+        # Clean up cancel flag
+        if task_id in cancel_flags:
+            del cancel_flags[task_id]
+            
+        # Update task status
+        if task_id in processing_tasks:
+            processing_tasks[task_id]["status"] = "cancelled"
+            processing_tasks[task_id]["end_time"] = datetime.now()
+            
+        logger.info(f"Cleaned up cancelled task: {task_id}")
+        
+    except Exception as e:
+        logger.error(f"Error cleaning up task {task_id}: {e}")
+
 def process_video_task_enhanced(
     task_id, video_path, target_languages, api_keys, options
 ):
     """Enhanced video processing with intelligent API management and detailed status"""
-    global processing_tasks
+    global processing_tasks, task_processors
 
     try:
         logger.info(f"Starting enhanced processing for task {task_id}")
@@ -302,6 +563,9 @@ def process_video_task_enhanced(
 
         def emit_step_progress(step_id, step_progress, message, force_emit=False, **kwargs):
             """Enhanced emit function with better reliability"""
+            if cancel_flags.get(task_id):
+                raise InterruptedError("Task cancelled")
+
             step_weights = {
                 "initialization": 5,
                 "download": 15, 
@@ -365,20 +629,29 @@ def process_video_task_enhanced(
                 # Continue execution even if emit fails
 
         # Step 1: Initialization
+        if cancel_flags.get(task_id):
+            raise InterruptedError("Task cancelled during initialization")
+
         emit_step_progress("initialization", 0, "Initializing enhanced processor...")
         socketio.sleep(0)
         
         processor = EnhancedOptimizedVideoSubtitleProcessor(
             model_size=options.get("model_size", "base"), 
             gemini_api_keys=api_keys,
-            socketio=socketio
+            socketio=socketio,
+            task_id=task_id
         )
         processor.set_task_id(task_id)
+        
+        task_processors[task_id] = processor
         
         emit_step_progress("initialization", 100, "Enhanced processor initialized")
         socketio.sleep(0)
 
         # Step 2: Handle video input
+        if cancel_flags.get(task_id):
+            raise InterruptedError("Task cancelled before download")
+
         if not video_path and processing_tasks[task_id].get("video_url"):
             video_url = processing_tasks[task_id]["video_url"]
             emit_step_progress("download", 0, "Starting video download...")
@@ -395,6 +668,10 @@ def process_video_task_enhanced(
             emit_step_progress("download", 100, "Download completed")
         else:
             emit_step_progress("download", 100, "Using uploaded file")
+            
+        if cancel_flags.get(task_id):
+            raise InterruptedError("Task cancelled after download")
+
         file_hash = get_file_hash(video_path)
         cached_transcription = load_from_cache(file_hash, "transcription")
         socketio.sleep(0)
@@ -406,24 +683,26 @@ def process_video_task_enhanced(
             emit_step_progress("transcription", 100, "Using cached transcription data")
             socketio.sleep(0)
         else:
+            if cancel_flags.get(task_id):
+                raise InterruptedError("Task cancelled before transcription")
+
             emit_step_progress("transcription", 0, "Starting audio transcription...")
             socketio.sleep(0)
+
+            # Set start time cho progress estimation
+            processor.model._start_time = time.time()
             
             result = processor.model.transcribe(
                 video_path,
                 word_timestamps=True,
-                verbose=False,
                 language="en",
                 temperature=0,
                 best_of=3,
                 beam_size=3,
                 patience=1.0,
-                fp16=True,
-                compression_ratio_threshold=2.4,
-                logprob_threshold=-1.0,
-                no_speech_threshold=0.6,
             )
-    
+            logger.info(f"Đã nhận dạng được {len(result['segments'])} segments")
+
         emit_step_progress(
             "transcription",
             90,
@@ -437,6 +716,9 @@ def process_video_task_enhanced(
         socketio.sleep(0)
 
         # Step 4: Timing optimization
+        if cancel_flags.get(task_id):
+            raise InterruptedError("Task cancelled before timing optimization")
+
         emit_step_progress("timing", 0, "Starting timing optimization...")
         socketio.sleep(0)
         
@@ -460,6 +742,9 @@ def process_video_task_enhanced(
         # Step 5: Enhanced Translation
         translated_files = {}
         if target_languages and api_keys:
+            if cancel_flags.get(task_id):
+                raise InterruptedError("Task cancelled before translation")
+
             emit_step_progress(
                 "translation", 0, f"Starting enhanced translation to {len(target_languages)} languages..."
             )
@@ -479,6 +764,9 @@ def process_video_task_enhanced(
 
                 # Create SRT files
                 for lang, translated_texts in translated_texts_dict.items():
+                    if cancel_flags.get(task_id):
+                        raise InterruptedError("Task cancelled during file creation")
+
                     processed_langs += 1
                     file_progress = 85 + (processed_langs * 15 // total_langs)  # 85-100%
                     emit_step_progress(
@@ -502,7 +790,10 @@ def process_video_task_enhanced(
 
                 emit_step_progress("translation", 100, "All translations completed")
                 socketio.sleep(0)
-                
+
+            except InterruptedError:
+                logger.info(f"Translation cancelled for task {task_id}")
+                raise
             except Exception as translation_error:
                     logger.error(f"Translation error: {translation_error}")
                     emit_step_progress("translation", 100, f"Translation completed with errors: {str(translation_error)}")
@@ -513,6 +804,9 @@ def process_video_task_enhanced(
             socketio.sleep(0)
 
         # Step 6: Completion
+        if cancel_flags.get(task_id):
+            raise InterruptedError("Task cancelled before completion")
+
         logger.info("Starting completion phase...")
         socketio.sleep(0.2)  # Small delay before completion
         emit_step_progress("completion", 0, "Finalizing results...")
@@ -576,6 +870,20 @@ def process_video_task_enhanced(
         logger.info(f"📊 Final API Status - Gemini: {api_status['total_usage']} requests, "
                    f"{api_status['total_errors']} errors, Google Translate: {api_status['google_translate']}")
 
+    except InterruptedError as e:
+        logger.info(f"Task {task_id} was cancelled: {e}")
+        cleanup_cancelled_task(task_id)
+        
+        # Emit cancellation notification
+        try:
+            socketio.emit("task_cancelled", {
+                "task_id": task_id,
+                "message": "Task was cancelled by user",
+                "status": "cancelled"
+            }, room=task_id)
+            socketio.sleep(0.1)
+        except:
+            pass
     except Exception as e:
         logger.error(f"Enhanced processing error for task {task_id}: {e}")
         processing_tasks[task_id]["status"] = "error"
@@ -589,6 +897,9 @@ def process_video_task_enhanced(
         }
 
         socketio.emit("progress_update", error_data, room=task_id)
+    finally:
+        # Always clean up resources
+        cleanup_cancelled_task(task_id)
 
 
 # Enhanced WebSocket event handlers
@@ -633,6 +944,43 @@ def handle_leave_task(data):
     if task_id:
         leave_room(task_id)
         logger.info(f"🚪 Client {request.sid} left task room: {task_id}")
+
+@socketio.on("cancel_task")
+def handle_cancel_task(data):
+    """Handle task cancellation from WebSocket"""
+    task_id = data.get("task_id")
+    if not task_id:
+        emit("error", {"message": "Task ID required"}, room=request.sid)
+        return
+        
+    logger.info(f"Received cancel request for task {task_id} from {request.sid}")
+    
+    if task_id not in processing_tasks:
+        emit("error", {"message": "Task not found"}, room=request.sid)
+        return
+    
+    # Set cancel flag
+    cancel_flags[task_id] = True
+    
+    # Update task status
+    if processing_tasks[task_id]["status"] == "processing":
+        processing_tasks[task_id]["status"] = "cancelling"
+        processing_tasks[task_id]["cancel_time"] = datetime.now()
+        
+        # Emit cancellation acknowledgment
+        emit("cancel_acknowledged", {
+            "task_id": task_id,
+            "message": "Cancellation request received, stopping task...",
+            "status": "cancelling"
+        }, room=task_id)
+        
+        logger.info(f"Task {task_id} marked for cancellation")
+    else:
+        emit("cancel_result", {
+            "task_id": task_id,
+            "success": False,
+            "message": f"Cannot cancel task with status: {processing_tasks[task_id]['status']}"
+        }, room=request.sid)
 
 
 # Flask routes
@@ -708,12 +1056,19 @@ def upload_file():
             "api_keys": api_keys,
             "options": options,
         }
+        
+        # Initialize cancel flag
+        cancel_flags[task_id] = False
 
         # Start enhanced processing
-        socketio.start_background_task(
+        socketio.start_background_task(heartbeat, task_id)
+        processing_thread = socketio.start_background_task(
             process_video_task_enhanced,
             task_id, video_path, target_languages, api_keys, options
         )
+        
+        # Store thread reference
+        task_threads[task_id] = processing_thread
 
         logger.info(f"Started enhanced processing task {task_id}")
 
@@ -726,6 +1081,98 @@ def upload_file():
     except Exception as e:
         logger.error(f"Enhanced upload error: {e}")
         return jsonify({"success": False, "message": f"Error: {str(e)}"})
+
+@app.route("/api/cancel_task/<task_id>", methods=["POST"])
+def cancel_task_api(task_id):
+    """API endpoint to cancel a specific task"""
+    try:
+        if task_id not in processing_tasks:
+            return jsonify({
+                "success": False,
+                "message": "Task not found"
+            }), 404
+
+        current_status = processing_tasks[task_id]["status"]
+        
+        if current_status not in ["queued", "processing"]:
+            return jsonify({
+                "success": False,
+                "message": f"Cannot cancel task with status: {current_status}"
+            }), 400
+
+        # Set cancel flag
+        cancel_flags[task_id] = True
+        
+        # Update status
+        processing_tasks[task_id]["status"] = "cancelling"
+        processing_tasks[task_id]["cancel_time"] = datetime.now()
+        
+        # Emit cancellation via WebSocket
+        try:
+            socketio.emit("cancel_acknowledged", {
+                "task_id": task_id,
+                "message": "Cancellation request received, stopping task...",
+                "status": "cancelling"
+            }, room=task_id)
+        except:
+            pass
+
+        logger.info(f"API cancellation request for task {task_id}")
+        
+        return jsonify({
+            "success": True,
+            "message": f"Cancellation request sent for task {task_id}",
+            "task_id": task_id
+        })
+
+    except Exception as e:
+        logger.error(f"Cancel task API error: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"Error cancelling task: {str(e)}"
+        }), 500
+
+@app.route("/api/cancel_all_tasks", methods=["POST"])
+def cancel_all_tasks():
+    """API endpoint to cancel all active tasks"""
+    try:
+        cancelled_tasks = []
+        
+        for task_id, task in processing_tasks.items():
+            if task["status"] in ["queued", "processing"]:
+                # Set cancel flag
+                cancel_flags[task_id] = True
+                
+                # Update status
+                task["status"] = "cancelling"
+                task["cancel_time"] = datetime.now()
+                
+                cancelled_tasks.append(task_id)
+                
+                # Emit cancellation via WebSocket
+                try:
+                    socketio.emit("cancel_acknowledged", {
+                        "task_id": task_id,
+                        "message": "Mass cancellation request received, stopping task...",
+                        "status": "cancelling"
+                    }, room=task_id)
+                except:
+                    pass
+
+        logger.info(f"Mass cancellation requested for {len(cancelled_tasks)} tasks")
+        
+        return jsonify({
+            "success": True,
+            "message": f"Cancellation request sent for {len(cancelled_tasks)} tasks",
+            "cancelled_tasks": cancelled_tasks
+        })
+
+    except Exception as e:
+        logger.error(f"Cancel all tasks error: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"Error cancelling tasks: {str(e)}"
+        }), 500
 
 
 @app.route("/download/<path:filename>")
@@ -746,7 +1193,7 @@ def download_file(filename):
 
 @app.route("/api/task_status/<task_id>")
 def get_task_status(task_id):
-    """Get enhanced task status including API information"""
+    """Get enhanced task status including cancellation info"""
     if task_id not in processing_tasks:
         return jsonify({"error": "Task not found"}), 404
 
@@ -755,6 +1202,8 @@ def get_task_status(task_id):
         "task_id": task_id,
         "status": task["status"],
         "start_time": task["start_time"].isoformat(),
+        "cancellable": task["status"] in ["queued", "processing"],
+        "is_cancelled": cancel_flags.get(task_id, False)
     }
 
     if task["status"] == "completed" and "results" in task:
@@ -762,6 +1211,8 @@ def get_task_status(task_id):
     elif task["status"] == "processing":
         elapsed_time = (datetime.now() - task["start_time"]).total_seconds()
         status_data["elapsed_time"] = elapsed_time
+    elif task["status"] == "cancelled" and "cancel_time" in task:
+        status_data["cancel_time"] = task["cancel_time"].isoformat()
 
     return jsonify(status_data)
 
@@ -777,7 +1228,7 @@ def validate_api_keys():
             return jsonify({"success": False, "message": "No API keys provided"})
 
         # Use enhanced translation manager for validation
-        translation_manager = EnhancedTranslationManager(api_keys)
+        translation_manager = EnhancedTranslationManager(api_keys, socketio)
         
         # Test each key with a simple request
         valid_keys = []
@@ -797,7 +1248,7 @@ def validate_api_keys():
                         temperature=0
                     ))
                 
-                if response.text:
+                if _extract_response_text(response):
                     valid_keys.append(f"Key {i+1}: ...{key[-8:]}")
                     logger.info(f"API key {i+1} validated: ...{key[-8:]}")
                 else:
@@ -826,6 +1277,46 @@ def validate_api_keys():
         logger.error(f"Enhanced API key validation error: {e}")
         return jsonify({"success": False, "message": f"Validation error: {str(e)}"})
 
+def _extract_response_text(response) -> str:
+        """
+        Safely extract text from Gemini response (multi-part supported).
+        """
+        try:
+            # Method 1: Preferred - candidates[0].content.parts
+            if hasattr(response, "candidates") and response.candidates:
+                candidate = response.candidates[0]
+                if hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
+                    text_parts = []
+                    for part in candidate.content.parts:
+                        # part có thể là dict hoặc object
+                        if isinstance(part, dict) and "text" in part:
+                            text_parts.append(part["text"])
+                        elif hasattr(part, "text") and part.text:
+                            text_parts.append(part.text)
+                    if text_parts:
+                        return "\n".join(text_parts)
+
+            # Method 2: Direct parts (nếu SDK trả về trực tiếp)
+            if hasattr(response, "parts"):
+                text_parts = []
+                for part in response.parts:
+                    if isinstance(part, dict) and "text" in part:
+                        text_parts.append(part["text"])
+                    elif hasattr(part, "text") and part.text:
+                        text_parts.append(part.text)
+                if text_parts:
+                    return "\n".join(text_parts)
+
+            # Method 3: Fallback simple text
+            if hasattr(response, "text"):
+                return getattr(response, "text", "")
+
+            logger.error(f"Could not extract text from Gemini response. Raw: {response}")
+            return ""
+
+        except Exception as e:
+            logger.error(f"Error extracting response text: {e}")
+            return ""
 
 @app.route("/api/reset_api_errors", methods=["POST"])
 def reset_api_errors():
@@ -954,7 +1445,9 @@ def get_progress(task_id):
         'status': task['status'],
         'progress': task['progress'],
         'message': task['message'],
-        'elapsed_time': elapsed_time
+        'elapsed_time': elapsed_time,
+        'cancellable': task['status'] in ['queued', 'processing'],
+        # 'is_cancelled': cancel_flags.get(task_id, False)
     }
     
     if task['status'] == 'completed' and task['results']:

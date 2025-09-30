@@ -1,6 +1,6 @@
 # video_subtitle_processor.py
 
-import whisper
+from faster_whisper import WhisperModel
 import os
 import re
 import time
@@ -10,11 +10,8 @@ from datetime import timedelta
 from pathlib import Path
 import argparse
 import logging
-import google.generativeai as genai
 from typing import List, Dict, Optional
 import concurrent.futures
-import threading
-import random
 
 # Import the enhanced translation manager
 from enhanced_translation_manager import EnhancedTranslationManager
@@ -25,7 +22,6 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),  # This will show in Docker logs
-        logging.FileHandler('logs/processor.log') if os.path.exists('logs') else logging.NullHandler()
     ]
 )
 logger = logging.getLogger(__name__)
@@ -40,7 +36,7 @@ class VideoSubtitleProcessor:
     - Docker logs integration
     """
     
-    def __init__(self, model_size='base', gemini_api_key=None, gemini_api_keys=None):
+    def __init__(self, model_size='base', gemini_api_key=None, gemini_api_keys=None, socketio=None):
         """
         Initialize processor
         
@@ -59,7 +55,7 @@ class VideoSubtitleProcessor:
             api_keys = [gemini_api_key]
         
         # Initialize enhanced translation manager
-        self.translation_manager = EnhancedTranslationManager(api_keys)
+        self.translation_manager = EnhancedTranslationManager(api_keys, socketio=socketio)
         
         # For backward compatibility
         self.use_gemini = len(api_keys) > 0
@@ -127,7 +123,7 @@ class VideoSubtitleProcessor:
             logger.info(f"🔄 Loading Whisper model: {self.model_size}")
             start_time = time.time()
             
-            self.model = whisper.load_model(self.model_size)
+            self.model = WhisperModel(self.model_size, device="cpu", compute_type="int8")
             
             load_time = time.time() - start_time
             logger.info(f"✅ Whisper model loaded in {load_time:.2f}s")
@@ -216,21 +212,32 @@ class VideoSubtitleProcessor:
         
         try:
             # Enhanced Whisper parameters
-            result = self.model.transcribe(
+            segments_generator, info = self.model.transcribe(
                 video_path,
                 word_timestamps=True,
-                verbose=False,
                 language='en',
-                temperature=0.0,
                 best_of=3 if self.model_size in ['tiny', 'base'] else 5,
                 beam_size=3 if self.model_size in ['tiny', 'base'] else 5,
-                patience=1.0,
-                fp16=True,  # Use half precision for speed
-                compression_ratio_threshold=2.4,
-                logprob_threshold=-1.0,
-                no_speech_threshold=0.6,
+                # patience=1.0,
+                # compression_ratio_threshold=2.4,
+                # logprob_threshold=-1.0,
+                # no_speech_threshold=0.6,
             )
+            segments = []
+            for segment in segments_generator:
+                segments.append({
+                    'start': segment.start,
+                    'end': segment.end,
+                    'text': segment.text,
+                    # Thêm info khác nếu cần, ví dụ: 'words': segment.words
+                })
             
+            # Trả về kết quả dưới dạng Dict để tương thích với phần code còn lại
+            result = {
+                'segments': segments,
+                'info': info  # Giữ lại thông tin như ngôn ngữ được detect, v.v.
+            }
+
             transcription_time = time.time() - start_time
             logger.info(f"✅ Transcription completed in {transcription_time:.2f}s")
             logger.info(f"📝 Found {len(result['segments'])} segments")
@@ -602,7 +609,7 @@ class OptimizedVideoSubtitleProcessor(VideoSubtitleProcessor):
     
     def __init__(self, model_size='base', gemini_api_keys=None, socketio=None):
         # Call parent constructor with multiple API keys
-        super().__init__(model_size=model_size, gemini_api_keys=gemini_api_keys)
+        super().__init__(model_size=model_size, gemini_api_keys=gemini_api_keys, socketio=socketio)
         self.socketio = socketio
         self.current_task_id = None
         
@@ -613,6 +620,9 @@ class OptimizedVideoSubtitleProcessor(VideoSubtitleProcessor):
     def set_task_id(self, task_id: str):
         """Set current task ID for progress updates"""
         self.current_task_id = task_id
+        # IMPORTANT: Also set task_id in translation_manager
+        if self.translation_manager:
+            self.translation_manager.set_task_id(task_id)
     
     def emit_progress(self, step: str, progress: int, message: str, **kwargs):
         """Emit progress update via WebSocket"""
@@ -627,6 +637,7 @@ class OptimizedVideoSubtitleProcessor(VideoSubtitleProcessor):
             
             try:
                 self.socketio.emit('progress_update', data)
+                self.socketio.sleep(0.1)
                 logger.debug(f"📡 Emitted progress: {step} - {progress}% - {message}")
             except Exception as e:
                 logger.warning(f"⚠️ Failed to emit progress: {e}")

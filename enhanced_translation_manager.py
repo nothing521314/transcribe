@@ -1,14 +1,14 @@
 # enhanced_translation_manager.py
 
 import time
-import random
 import logging
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
 import google.generativeai as genai
 import threading
-import queue
+
+logger = logging.getLogger(__name__)
 
 # Safe import for Google Translate
 try:
@@ -18,8 +18,6 @@ except ImportError:
     Translator = None
     GOOGLE_TRANSLATE_AVAILABLE = False
     logger.warning("googletrans not available, falling back to basic translation")
-
-logger = logging.getLogger(__name__)
 
 class APIKeyStatus(Enum):
     ACTIVE = "active"
@@ -95,11 +93,13 @@ class EnhancedTranslationManager:
     Enhanced translation manager with intelligent API key switching and fallback
     """
     
-    def __init__(self, gemini_api_keys: List[str] = None):
+    def __init__(self, gemini_api_keys: List[str] = None, socketio=None):
         self.gemini_keys = []
         self.google_translator = None
         self.current_key_index = 0
         self.lock = threading.Lock()
+        self.socketio = socketio
+        self.current_task_id = None
         
         # Initialize Gemini API keys
         if gemini_api_keys:
@@ -123,7 +123,34 @@ class EnhancedTranslationManager:
         self.batch_size = 15  # Smaller batches for better reliability
         
         logger.info(f"Translation manager initialized with {len(self.gemini_keys)} Gemini keys")
-    
+    def set_task_id(self, task_id: str):
+        """Set current task ID for progress updates"""
+        self.current_task_id = task_id
+    def emit_progress(self, step: str, message: str, progress: float, target_language: str, **kwargs):
+        """Emit progress update via WebSocket"""
+        if self.socketio and self.current_task_id:
+            data = {
+                'task_id': self.current_task_id,
+                'step': step,
+                'message': message,
+                'progress': progress,
+                'status': 'processing',
+                'target_language': target_language,
+                **kwargs
+            }
+            
+            try:
+                # Emit with the SAME event name as other progress updates
+                self.socketio.emit('progress_translation', data, room=self.current_task_id)
+                
+                # Aggressive flush for eventlet
+                import eventlet
+                eventlet.sleep(0)
+                
+                logger.info(f"📡 Translation progress: {step} - {progress*100:.0f}% - {message}")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to emit translation progress: {e}")
+
     def get_available_gemini_key(self) -> Optional[APIKeyInfo]:
         """Get next available Gemini API key"""
         with self.lock:
@@ -211,24 +238,37 @@ class EnhancedTranslationManager:
             try:
                 # Configure API key
                 genai.configure(api_key=key_info.key)
-                model = genai.GenerativeModel('gemini-1.5-pro')
+                model = genai.GenerativeModel('gemini-2.5-flash')
                 
                 # Create optimized prompt
                 context_part = f"\n\nContext: {context}" if context else ""
-                prompt = f"""You are a professional subtitle translator. Translate these English subtitle segments to {lang_info['name']} ({lang_info['native']}).
+#                 prompt = f"""You are a professional subtitle translator. Translate these English subtitle segments to {lang_info['name']} ({lang_info['native']}).
 
-CRITICAL REQUIREMENTS:
-1. Translate meaning and context, NOT word-by-word
-2. Keep similar length to maintain subtitle timing
-3. Use natural, conversational language
-4. Maintain emotional tone and style
-5. Handle technical terms appropriately{context_part}
+# CRITICAL REQUIREMENTS:
+# 1. Translate meaning and context, NOT word-by-word
+# 2. Keep similar length to maintain subtitle timing
+# 3. Use natural, conversational language
+# 4. Maintain emotional tone and style
+# 5. Handle technical terms appropriately{context_part}
+
+# SEGMENTS TO TRANSLATE ({len(texts)} items):
+# {chr(10).join([f"{i+1}. {text}" for i, text in enumerate(texts)])}
+
+# Return ONLY the translations in the same order, numbered 1-{len(texts)}.
+# Do not include explanations or additional text."""
+                prompt = f"""You are a professional subtitle translator translating English to {lang_info['name']} ({lang_info['native']}). The source text is from a video script and is intended for general audience viewing.
+
+CRITICAL INSTRUCTIONS:
+1. Translate meaning naturally and concisely, aiming for similar length to maintain subtitle timing.
+2. Ensure the translation adheres to general safety guidelines and is not harmful.
+3. The output MUST be only the translations, numbered exactly 1-{len(texts)}.
+4. DO NOT include any extra text, headings, explanations, or dialogue other than the numbered translations.
+{context_part}
 
 SEGMENTS TO TRANSLATE ({len(texts)} items):
 {chr(10).join([f"{i+1}. {text}" for i, text in enumerate(texts)])}
 
-Return ONLY the translations in the same order, numbered 1-{len(texts)}.
-Do not include explanations or additional text."""
+Return ONLY the translations numbered 1-{len(texts)}."""
 
                 logger.info(f"Translating batch of {len(texts)} texts to {target_language} using {key_info.short_key}")
                 
@@ -237,37 +277,61 @@ Do not include explanations or additional text."""
                     prompt,
                     generation_config=genai.types.GenerationConfig(
                         temperature=0.1,
-                        max_output_tokens=2000,
+                        max_output_tokens=max(4000, len(texts) * 100), 
+                        top_p=0.95,
+                        top_k=40
                     )
                 )
+                # FIX: Truy cập response text một cách an toàn
+                response_text = self._extract_response_text(response)
+            
+                if not response_text or len(response_text.strip()) < 10:
+                    logger.warning(f"Empty or too short response from {key_info.short_key}: '{response_text[:100]}'")
+                    if attempt < self.max_retries - 1:
+                        time.sleep(2)  # Wait before retry
+                        continue
+                    return texts, False
                 
                 # Parse response
-                translations = self._parse_gemini_response(response.text, len(texts))
+                translations = self._parse_gemini_response(response_text, len(texts))
                 
                 # Validate quality
-                if len(translations) == len(texts) and self._validate_translations(texts, translations):
+                valid_translations = [t for t in translations if t.strip()]
+                if len(valid_translations) >= len(texts) * 0.7:  # At least 70% valid
                     key_info.mark_success()
-                    logger.info(f"Successfully translated batch using {key_info.short_key}")
-                    return translations, True
-                else:
-                    logger.warning(f"Poor translation quality from {key_info.short_key}")
-                    if attempt < self.max_retries - 1:
-                        continue
+                    logger.info(f"Successfully translated {len(valid_translations)}/{len(texts)} using {key_info.short_key}")
                     
+                    # Fill empty translations with originals
+                    final_translations = []
+                    for i, (original, translated) in enumerate(zip(texts, translations)):
+                        if translated.strip():
+                            final_translations.append(translated)
+                        else:
+                            final_translations.append(original)
+                            logger.warning(f"Using original for segment {i+1}: '{original[:50]}'")
+                    
+                    return final_translations, True
+                else:
+                    logger.warning(f"Poor translation quality: {len(valid_translations)}/{len(texts)} valid")
+
+
             except Exception as e:
                 error_msg = str(e)
                 key_info.mark_error(error_msg)
                 logger.warning(f"Translation error with {key_info.short_key}: {error_msg}")
                 
-                # Don't retry if it's a quota/billing issue
-                if any(keyword in error_msg.lower() for keyword in ['quota', 'billing', 'exceeded']):
-                    logger.error(f"Quota exceeded for {key_info.short_key}, marking as unavailable")
+                # Check for specific error types
+                if any(keyword in error_msg.lower() for keyword in 
+                    ['quota', 'billing', 'exceeded', 'resource_exhausted']):
+                    logger.error(f"Quota/billing error for {key_info.short_key}")
                     break
                 
                 if attempt < self.max_retries - 1:
-                    time.sleep(1 * (attempt + 1))  # Exponential backoff
+                    wait_time = min(2 ** attempt, 10)  # Exponential backoff, max 10s
+                    logger.info(f"Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
                     continue
-        
+        logger.warning("All Gemini attempts failed, will fallback to Google Translate")
         return texts, False  # Failed with all API keys
     
     def translate_batch_with_google(self, texts: List[str], target_language: str) -> List[str]:
@@ -317,7 +381,7 @@ Do not include explanations or additional text."""
         return translations
     
     def translate_texts(self, texts: List[str], target_language: str, 
-                       context: str = "") -> List[str]:
+                   context: str = "") -> List[str]:
         """
         Main translation method with intelligent fallback
         """
@@ -335,7 +399,17 @@ Do not include explanations or additional text."""
             end_idx = min(start_idx + self.batch_size, len(texts))
             batch_texts = texts[start_idx:end_idx]
             
+            batch_progress = (batch_idx + 1) / total_batches
+            
             logger.info(f"Processing batch {batch_idx + 1}/{total_batches} ({len(batch_texts)} texts)")
+            
+            # Emit progress BEFORE processing
+            self.emit_progress(
+                "translation",
+                f"Translating to {target_language}: batch {batch_idx + 1}/{total_batches}",
+                batch_progress,
+                target_language,
+            )
             
             # Try Gemini first
             translations, success = self.translate_batch_with_gemini(
@@ -344,13 +418,31 @@ Do not include explanations or additional text."""
             
             if not success:
                 logger.warning(f"Gemini translation failed for batch {batch_idx + 1}, trying Google Translate")
+                
+                # Emit fallback notification
+                self.emit_progress(
+                    "translation",
+                    f"Using Google Translate fallback for {target_language}: batch {batch_idx + 1}/{total_batches}",
+                    batch_progress,
+                    target_language,
+                )
+                
                 translations = self.translate_batch_with_google(batch_texts, target_language)
             
             all_translations.extend(translations)
             
             # Small delay between batches
             if batch_idx < total_batches - 1:
-                time.sleep(0.5)
+                import eventlet
+                eventlet.sleep(0.5)
+        
+        # Final completion emit
+        self.emit_progress(
+            "translation",
+            f"Completed translation to {target_language}",
+            1.0,
+            target_language,
+        )
         
         logger.info(f"Translation completed: {len(all_translations)} results")
         return all_translations
@@ -390,7 +482,46 @@ Do not include explanations or additional text."""
         # Check that at least 80% of translations are non-empty
         non_empty_translations = sum(1 for t in translations if t.strip())
         return non_empty_translations >= len(translations) * 0.8
-    
+
+    def _extract_response_text(self, response) -> str:
+        """
+        Safely extract text by ONLY accessing the candidates/parts structure, 
+        completely ignoring the problematic response.text accessor.
+        """
+        
+        # Kiểm tra và log finish_reason trước
+        finish_reason = getattr(getattr(response, "candidates", [None])[0], "finish_reason", None)
+        if finish_reason:
+            logger.debug(f"Response finish reason: {finish_reason}")
+            
+        if finish_reason and finish_reason.value in [2, 3]: # STOP (2) hoặc SAFETY (3)
+             logger.warning(f"Gemini finished with reason {finish_reason.value}. Checking prompt_feedback...")
+             
+             # Kiểm tra phản hồi bị chặn
+             if hasattr(response, "prompt_feedback") and hasattr(response.prompt_feedback, "block_reason"):
+                logger.warning(f"Response blocked: {getattr(response.prompt_feedback.block_reason, 'name', 'N/A')}")
+             return ""
+
+
+        # Logic trích xuất chính: CHỈ lặp qua candidates/parts
+        if hasattr(response, "candidates") and response.candidates:
+            candidate = response.candidates[0]
+            content = getattr(candidate, "content", None)
+            
+            if content and hasattr(content, "parts"):
+                text_parts = []
+                for part in content.parts:
+                    # Dùng getattr an toàn để trích xuất text
+                    text = getattr(part, "text", "") 
+                    if text:
+                        text_parts.append(text)
+                
+                if text_parts:
+                    return "\n".join(text_parts)
+        
+        logger.error(f"Could not extract text from Gemini response (Failed candidates/parts check). Raw: {response}")
+        return ""
+
     def get_api_status(self) -> Dict:
         """Get current API key status"""
         status = {

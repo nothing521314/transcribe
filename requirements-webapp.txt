@@ -1,6 +1,6 @@
 # Core AI/ML dependencies
-openai-whisper==20231117
-google-generativeai==0.3.2
+faster_whisper==1.2.0
+google-generativeai==0.8.5
 
 # Web framework and WSGI server
 Flask==2.3.3

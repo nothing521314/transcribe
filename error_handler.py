@@ -1,4 +1,4 @@
-import whisper
+from faster_whisper import WhisperModel
 import os
 import re
 import time
@@ -206,8 +206,10 @@ class OptimizedVideoSubtitleProcessor:
             logger.info(f"Loading Whisper model: {self.model_size}")
             start_time = time.time()
             
-            self.model = whisper.load_model(
+            self.model = WhisperModel(
                 self.model_size,
+                device="cpu",
+                compute_type="int8", 
                 download_root=os.path.expanduser("~/.cache/whisper")
             )
             
@@ -476,10 +478,8 @@ Return ONLY the translations in the same order, numbered 1-{len(texts)}.
             result = self.model.transcribe(
                 video_path,
                 word_timestamps=True,
-                verbose=False,
                 language='en',
                 temperature=0.0,
-                fp16=True,
             )
             
             transcription_time = time.time() - start_time
