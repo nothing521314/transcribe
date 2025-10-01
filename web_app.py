@@ -17,11 +17,12 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 from werkzeug.utils import secure_filename
 import time
 import logging
+import yt_dlp
 
 # Import enhanced modules
 from video_subtitle_processor import OptimizedVideoSubtitleProcessor
 from enhanced_translation_manager import EnhancedTranslationManager
-import yt_dlp
+from routes.enhance_subtitle import init_enhance_routes
 
 # Enhanced logging setup
 logging.basicConfig(
@@ -111,6 +112,33 @@ task_processors = {}  # Store processor instances for cancellation
 task_threads = {}     # Store thread references for cancellation
 cancel_flags = {}     # Global cancel flags
 translation_managers = {}  # Cache translation managers
+
+def cleanup_task(task_id, status = 'cancelled'):
+    """Clean up resources for cancelled task"""
+    try:
+        # Clean up processor
+        if task_id in task_processors:
+            del task_processors[task_id]
+            
+        # Clean up thread reference
+        if task_id in task_threads:
+            del task_threads[task_id]
+            
+        # Clean up cancel flag
+        if task_id in cancel_flags:
+            del cancel_flags[task_id]
+            
+        # Update task status
+        if task_id in processing_tasks:
+            processing_tasks[task_id]["status"] = status
+            processing_tasks[task_id]["end_time"] = datetime.now()
+            
+        logger.info(f"Cleaned up cancelled task: {task_id}")
+        
+    except Exception as e:
+        logger.error(f"Error cleaning up task {task_id}: {e}")
+
+init_enhance_routes(app, socketio, processing_tasks, cancel_flags, OUTPUT_FOLDER, cleanup_task)
 
 def heartbeat(task_id):
     """Optimized heartbeat với flush"""
@@ -534,31 +562,6 @@ def load_from_cache(file_hash, cache_type="transcription"):
     except Exception as e:
         logger.error(f"Error loading cache: {e}")
     return None
-
-def cleanup_task(task_id, status = 'cancelled'):
-    """Clean up resources for cancelled task"""
-    try:
-        # Clean up processor
-        if task_id in task_processors:
-            del task_processors[task_id]
-            
-        # Clean up thread reference
-        if task_id in task_threads:
-            del task_threads[task_id]
-            
-        # Clean up cancel flag
-        if task_id in cancel_flags:
-            del cancel_flags[task_id]
-            
-        # Update task status
-        if task_id in processing_tasks:
-            processing_tasks[task_id]["status"] = status
-            processing_tasks[task_id]["end_time"] = datetime.now()
-            
-        logger.info(f"Cleaned up cancelled task: {task_id}")
-        
-    except Exception as e:
-        logger.error(f"Error cleaning up task {task_id}: {e}")
 
 def process_video_task_enhanced(
     task_id, video_path, target_languages, api_keys, options

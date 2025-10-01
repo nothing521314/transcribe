@@ -2,6 +2,8 @@ FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y \
     ffmpeg \
+    gcc \
+    python3-dev \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -19,8 +21,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
 RUN mkdir -p uploads output cache temp logs static templates && \
     chown -R appuser:appuser /app
 
-COPY web_app.py video_subtitle_processor.py enhanced_translation_manager.py ./
+COPY web_app.py video_subtitle_processor.py enhanced_translation_manager.py subtitle_enhancer.py ./
 COPY templates/ templates/
+COPY routes/ routes/
 COPY static/ static/
 COPY gunicorn.conf.py logging.conf ./
 COPY scripts/start-webapp.sh ./

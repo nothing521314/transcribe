@@ -128,6 +128,9 @@
 			</div>
 		</header>
 		<div class="mb-2 flex justify-end space-x-4">
+			<a href="/enhance_subtitle" class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
+				<i class="fas fa-level-up mr-2"></i>Enhance English Subtitle
+			</a>
 			<a href="/youtube_downloader" class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
 				<i class="fas fa-download mr-2"></i>Youtube Downloader
 			</a>
@@ -1307,6 +1310,7 @@
 						if (event.target.files.length > 0) {
 							this.selectedFile = event.target.files[0];
 							this.videoUrl = "";
+              event.target.value = "";
 							console.log("File selected:", this.selectedFile.name);
 						}
 					},

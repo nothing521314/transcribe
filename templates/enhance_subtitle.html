@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Enhanced English Subtitle Optimizer</title>
+	<script src="https://cdn.tailwindcss.com"></script>
+	<script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+	<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
+	<script>
+		tailwind.config = {
+			theme: {
+				extend: {
+					colors: {
+						primary: "#6366f1",
+						secondary: "#ec4899",
+					},
+					animation: {
+						"gradient-x": "gradient-x 15s ease infinite",
+						float: "float 6s ease-in-out infinite",
+					},
+				},
+			},
+		};
+	</script>
+	<style>
+		.gradient-bg {
+			background: linear-gradient(-45deg, #667eea, #764ba2, #f093fb, #f5576c);
+			background-size: 400% 400%;
+			animation: gradient 15s ease infinite;
+		}
+
+		@keyframes gradient {
+			0%, 100% { background-position: 0% 50%; }
+			50% { background-position: 100% 50%; }
+		}
+
+		.glass-effect {
+			backdrop-filter: blur(10px);
+			background: rgba(255, 255, 255, 0.1);
+			border: 1px solid rgba(255, 255, 255, 0.2);
+		}
+
+		.custom-scrollbar::-webkit-scrollbar { width: 8px; }
+		.custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+		.custom-scrollbar::-webkit-scrollbar-thumb { background: #6366f1; border-radius: 10px; }
+		.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #4f46e5; }
+
+		[x-cloak] { display: none !important; }
+
+		.btn-primary {
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			transition: all 0.3s ease;
+		}
+		.btn-primary:hover {
+			transform: translateY(-2px);
+			box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+		}
+		.btn-primary:disabled {
+			opacity: 0.6;
+			transform: none;
+			cursor: not-allowed;
+		}
+	</style>
+</head>
+
+<body class="min-h-screen gradient-bg text-white custom-scrollbar">
+	<div x-data="enhanceSubtitleApp()" x-init="init()" x-cloak class="container mx-auto px-4 md:px-24 py-8">
+		<!-- Header -->
+		<header class="text-center mb-12">
+			<h1 class="text-4xl md:text-5xl font-bold mb-4">✨ Enhanced English Subtitle Optimizer</h1>
+			<p class="text-lg md:text-xl opacity-90">Merge, optimize, and rewrite your subtitles intelligently</p>
+			<div class="mt-4">
+				<span class="text-sm">Status: </span>
+				<span :class="connectionStatus === 'connected' ? 'text-green-400' : 'text-red-400'" 
+					  x-text="connectionStatus" class="font-semibold"></span>
+			</div>
+		</header>
+
+		<!-- Navigation -->
+		<div class="mb-6 flex justify-end space-x-4">
+			<a href="/" class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
+				<i class="fas fa-home mr-2"></i>Home
+			</a>
+      <button @click="clearCache()"
+				class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
+				<i class="fas fa-trash mr-2"></i>Clear Cache
+			</button>
+		</div>
+
+		<!-- Upload Section -->
+		<div class="glass-effect rounded-xl p-6 mb-8">
+			<h3 class="text-xl font-bold mb-4">
+				<i class="fas fa-file-upload text-purple-400 mr-2"></i>Upload English SRT File
+			</h3>
+			
+			<div class="space-y-4">
+				<!-- File Upload -->
+				<div class="border-2 border-dashed border-white/30 rounded-lg p-8 text-center hover:border-purple-400 transition-colors cursor-pointer"
+					 @click="$refs.fileInput.click()">
+					<input type="file" 
+						   x-ref="fileInput" 
+						   @change="handleFileUpload($event)" 
+						   accept=".srt"
+						   class="hidden" />
+					<i class="fas fa-cloud-upload-alt text-5xl mb-4 text-purple-400"></i>
+					<p class="text-lg mb-2">Click to upload or drag and drop</p>
+					<p class="text-sm text-white/60">English SRT subtitle file only</p>
+					<div x-show="fileName" class="mt-4 text-green-400">
+						<i class="fas fa-check-circle mr-2"></i>
+						<span x-text="fileName"></span>
+					</div>
+				</div>
+
+				<!-- API Key Input -->
+				<div>
+					<label class="block text-sm font-medium mb-2">
+						<i class="fas fa-key text-yellow-400 mr-2"></i>Gemini API Key (Required for optimization & rewriting)
+					</label>
+					<textarea 
+						x-model="apiKey"
+						placeholder="Enter your Gemini API key here..."
+						rows="3"
+						class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:border-purple-400 focus:outline-none resize-none"></textarea>
+					<p class="text-xs text-white/60 mt-2">
+						<i class="fas fa-info-circle mr-1"></i>
+						Get your free API key from <a href="https://makersuite.google.com/app/apikey" target="_blank" class="text-blue-400 hover:underline">Google AI Studio</a>
+					</p>
+				</div>
+
+				<!-- Options -->
+				<div class="grid md:grid-cols-2 gap-4">
+					<label class="flex items-center space-x-3 cursor-pointer">
+						<input type="checkbox" x-model="options.mergeLines" class="w-5 h-5 rounded" />
+						<span>Merge consecutive lines (reduce by 50%)</span>
+					</label>
+					<label class="flex items-center space-x-3 cursor-pointer">
+						<input type="checkbox" x-model="options.optimizeText" class="w-5 h-5 rounded" />
+						<span>Optimize spelling & punctuation</span>
+					</label>
+					<label class="flex items-center space-x-3 cursor-pointer">
+						<input type="checkbox" x-model="options.rewriteSentences" class="w-5 h-5 rounded" />
+						<span>Rewrite every 3 sentences</span>
+					</label>
+				</div>
+
+				<!-- Info Box -->
+				<div class="bg-blue-500/20 border border-blue-400/30 rounded-lg p-4">
+					<p class="text-sm text-blue-200">
+						<i class="fas fa-info-circle mr-2"></i>
+						<strong>Processing Steps:</strong><br/>
+						1. Merge even lines with odd lines (1000→500 lines)<br/>
+						2. Fix spelling, remove special chars, add proper punctuation<br/>
+						3. Rewrite every 3 sentences with different structure
+					</p>
+				</div>
+			</div>
+		</div>
+
+		<!-- Submit Button -->
+		<div class="text-center mb-8">
+			<button @click="submitForm()" 
+					:disabled="processing || !fileName || !apiKey"
+					class="btn-primary px-8 py-4 rounded-xl font-bold text-lg shadow-lg">
+				<template x-if="!processing">
+					<span><i class="fas fa-magic mr-2"></i>Enhance Subtitle</span>
+				</template>
+				<template x-if="processing">
+					<span><i class="fas fa-spinner fa-spin mr-2"></i>Processing...</span>
+				</template>
+			</button>
+		</div>
+
+		<!-- Progress Modal -->
+		<div x-show="processing" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" x-cloak>
+			<div class="glass-effect rounded-xl p-8 max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
+				<!-- Header -->
+				<div class="text-center mb-6">
+					<div class="w-20 h-20 mx-auto mb-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+						<i class="fas fa-cog fa-spin text-3xl text-white"></i>
+					</div>
+					<h3 class="text-3xl font-bold mb-2">Enhancing Subtitle</h3>
+					<p class="text-white/80" x-text="currentMessage"></p>
+				</div>
+
+				<!-- Progress Bar -->
+				<div class="mb-6">
+					<div class="flex justify-between text-sm mb-2">
+						<span class="font-medium" x-text="currentStep"></span>
+						<span x-text="`${Math.round(progress)}%`" class="font-bold"></span>
+					</div>
+					<div class="w-full bg-white/20 rounded-full h-6 relative overflow-hidden">
+						<div class="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 rounded-full transition-all duration-500"
+							 :style="`width: ${progress}%`">
+							<div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-pulse"></div>
+						</div>
+						<div class="absolute inset-0 flex items-center justify-center text-sm font-bold text-white/90"
+							 x-text="`${Math.round(progress)}%`"></div>
+					</div>
+				</div>
+
+				<!-- Stats Grid -->
+				<div class="grid grid-cols-3 gap-4 mb-6">
+					<div class="bg-white/5 rounded-lg p-4 text-center">
+						<div class="text-2xl font-bold text-blue-400" x-text="stats.originalLines"></div>
+						<div class="text-xs text-white/60">Original Lines</div>
+					</div>
+					<div class="bg-white/5 rounded-lg p-4 text-center">
+						<div class="text-2xl font-bold text-green-400" x-text="stats.mergedLines"></div>
+						<div class="text-xs text-white/60">After Merge</div>
+					</div>
+					<div class="bg-white/5 rounded-lg p-4 text-center">
+						<div class="text-2xl font-bold text-purple-400" x-text="stats.processedLines"></div>
+						<div class="text-xs text-white/60">Processed</div>
+					</div>
+				</div>
+
+				<!-- Result Section -->
+				<div x-show="processingStatus === 'completed'" class="mb-6">
+					<div class="bg-green-500/20 border border-green-400/30 rounded-lg p-6 text-center">
+						<i class="fas fa-check-circle text-5xl text-green-400 mb-4"></i>
+						<h4 class="text-2xl font-bold text-green-400 mb-2">Enhancement Complete!</h4>
+						<p class="text-white/80">Your enhanced subtitle is ready</p>
+					</div>
+
+					<a :href="resultUrl" download class="block mt-6">
+						<button class="w-full btn-primary px-6 py-4 rounded-xl font-bold text-lg shadow-lg">
+							<i class="fas fa-download mr-2"></i>Download Enhanced Subtitle
+						</button>
+					</a>
+				</div>
+
+				<!-- Error Section -->
+				<div x-show="processingStatus === 'error'" class="mb-6">
+					<div class="bg-red-500/20 border border-red-400/30 rounded-lg p-6 text-center">
+						<i class="fas fa-exclamation-circle text-5xl text-red-400 mb-4"></i>
+						<h4 class="text-2xl font-bold text-red-400 mb-2">Processing Failed</h4>
+						<p class="text-white/80" x-text="currentMessage"></p>
+					</div>
+				</div>
+
+				<!-- Action Buttons -->
+				<div class="flex justify-center space-x-4 mt-6">
+					<button x-show="processingStatus === 'processing'" 
+							@click="cancelProcess()"
+							class="px-6 py-3 bg-red-500/20 border border-red-400/30 rounded-lg text-red-400 hover:bg-red-500/30 transition-colors">
+						<i class="fas fa-stop mr-2"></i>Cancel
+					</button>
+
+					<button x-show="processingStatus !== 'processing'" 
+							@click="resetForm()"
+							class="px-6 py-3 bg-blue-500/20 border border-blue-400/30 rounded-lg text-blue-400 hover:bg-blue-500/30 transition-colors">
+						<i class="fas fa-redo mr-2"></i>Process Another
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<script>
+		function enhanceSubtitleApp() {
+			return {
+				socket: null,
+				connectionStatus: "disconnected",
+				
+				fileName: "",
+				fileContent: null,
+				apiKey: "",
+				
+				options: {
+					mergeLines: true,
+					optimizeText: true,
+					rewriteSentences: true
+				},
+				
+				processing: false,
+				currentTaskId: null,
+				processingStatus: "",
+				progress: 0,
+				currentStep: "",
+				currentMessage: "Initializing...",
+				
+				stats: {
+					originalLines: 0,
+					mergedLines: 0,
+					processedLines: 0
+				},
+				
+				resultUrl: "",
+
+				init() {
+					this.initWebSocket();
+				},
+
+				initWebSocket() {
+					const socketUrl = window.location.origin;
+					console.log("Connecting to WebSocket...");
+
+					try {
+						this.socket = io(socketUrl, {
+							transports: ["websocket", "polling"],
+							timeout: 60000,
+							reconnection: true,
+							reconnectionAttempts: 10,
+							reconnectionDelay: 1000,
+						});
+
+						this.socket.on("connect", () => {
+							this.connectionStatus = "connected";
+							console.log("WebSocket connected:", this.socket.id);
+						});
+
+						this.socket.on("disconnect", (reason) => {
+							this.connectionStatus = "disconnected";
+							console.log("WebSocket disconnected:", reason);
+						});
+
+						this.socket.on("enhance_progress", (data) => {
+							console.log("Enhancement progress:", data);
+							this.progress = data.progress || 0;
+							this.currentStep = data.step || "";
+							this.currentMessage = data.message || "";
+							
+							if (data.stats) {
+								this.stats = { ...this.stats, ...data.stats };
+							}
+							
+							if (data.status === "completed") {
+								this.processingStatus = "completed";
+								this.resultUrl = data.download_url || "";
+							} else if (data.status === "error") {
+								this.processingStatus = "error";
+							}
+						});
+
+					} catch (error) {
+						console.error("WebSocket initialization failed:", error);
+						this.connectionStatus = "error";
+					}
+				},
+
+				handleFileUpload(event) {
+					const file = event.target.files[0];
+					if (!file) return;
+
+					if (!file.name.endsWith('.srt')) {
+						alert('Please upload an SRT file');
+						return;
+					}
+
+					this.fileName = file.name;
+          event.target.value = '';
+					const reader = new FileReader();
+					reader.onload = (e) => {
+						this.fileContent = e.target.result;
+						
+						const lines = this.fileContent.split('\n').filter(l => l.trim());
+						this.stats.originalLines = Math.floor(lines.length / 3);
+					};
+					reader.readAsText(file);
+				},
+
+				async submitForm() {
+					if (!this.fileName || !this.fileContent || !this.apiKey) {
+						alert("Please upload a file and provide API key");
+						return;
+					}
+
+					this.processing = true;
+					this.processingStatus = "processing";
+					this.progress = 0;
+
+					try {
+						const formData = new FormData();
+						formData.append('srt_content', this.fileContent);
+						formData.append('api_key', this.apiKey);
+						formData.append('merge_lines', this.options.mergeLines);
+						formData.append('optimize_text', this.options.optimizeText);
+						formData.append('rewrite_sentences', this.options.rewriteSentences);
+
+						const response = await fetch("/api/enhance_subtitle", {
+							method: "POST",
+							body: formData,
+						});
+
+						const result = await response.json();
+
+						if (result.success) {
+							this.currentTaskId = result.task_id;
+							this.socket.emit("join_task", { task_id: this.currentTaskId });
+						} else {
+							throw new Error(result.message || "Unknown error");
+						}
+					} catch (error) {
+						console.error("Submit error:", error);
+						this.processingStatus = "error";
+						this.currentMessage = `Error: ${error.message}`;
+					}
+				},
+
+				async cancelProcess() {
+					if (!this.currentTaskId) return;
+
+					if (confirm("Are you sure you want to cancel?")) {
+						try {
+							await fetch(`/api/cancel_task/${this.currentTaskId}`, {
+								method: "POST"
+							});
+							this.resetForm();
+						} catch (error) {
+							console.error("Cancel error:", error);
+						}
+					}
+				},
+
+				resetForm() {
+					this.processing = false;
+					this.processingStatus = "";
+					this.progress = 0;
+					this.currentStep = "";
+					this.currentMessage = "";
+					this.currentTaskId = null;
+					this.fileName = "";
+					this.fileContent = null;
+					this.stats = {
+						originalLines: 0,
+						mergedLines: 0,
+						processedLines: 0
+					};
+					this.resultUrl = "";
+				},
+
+        async clearCache() {
+          if (confirm("Are you sure you want to clear all cache files?")) {
+            try {
+              const response = await fetch('/api/clear_cache', {
+                method: "POST",
+              });
+              if (response.ok) {
+                alert('Cache cleared successfully!');
+              }
+            } catch (error) {
+              console.error('Error clearing cache: ', error);
+              alert('Error clearing cache');
+            }
+          }
+        }
+			};
+		}
+	</script>
+</body>
+</html>
