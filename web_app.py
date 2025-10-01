@@ -930,6 +930,7 @@ def handle_disconnect():
 
 
 @socketio.on("join_task")
+@socketio.on("join_task")
 def handle_join_task(data):
     task_id = data.get("task_id")
     if task_id:
@@ -943,14 +944,23 @@ def handle_join_task(data):
             "sid": request.sid,
         }, room=request.sid)
 
-        # Send current status if task exists
+        # SEND CURRENT STATUS IMMEDIATELY
         if task_id in processing_tasks:
             task = processing_tasks[task_id]
+            
+            # Send buffered progress if available
+            if "last_progress" in task:
+                logger.info(f"Sending buffered progress to newly joined client: {task['last_progress']}")
+                emit("enhance_progress", task["last_progress"], room=request.sid)
+                eventlet.sleep(0)
+            
+            # Send task status
             emit("task_status", {
                 "task_id": task_id,
                 "status": task["status"],
-                "message": f'Current task status: {task["status"]}',
-            }, room=task_id)
+                "message": task.get("message", f'Current task status: {task["status"]}'),
+            }, room=request.sid)
+            eventlet.sleep(0)
 
 
 @socketio.on("leave_task")

@@ -1,6 +1,7 @@
 import re
 import time
 import logging
+import eventlet
 from typing import List, Dict, Tuple
 import google.generativeai as genai
 
@@ -170,9 +171,14 @@ class SubtitleEnhancer:
         logger.info(f"Merged {len(segments)} segments into {len(merged)}")
         return merged
 
-    def optimize_text_batch(self, texts: List[str]) -> List[str]:
+    def optimize_text_batch(self, texts: List[str], cancel_flag: Dict = None, task_id: str = None) -> List[str]:
         """Optimize text batch with Gemini"""
         try:
+            # CHECK BEFORE API CALL
+            if cancel_flag and task_id and cancel_flag.get(task_id):
+                logger.info(f"Optimization cancelled before API call")
+                return texts
+        
             # Build prompt carefully
             original_lines = "\n".join([f"{i+1}. {t}" for i, t in enumerate(texts)])
             prompt = f"""Optimize these English subtitle texts by:
@@ -192,6 +198,11 @@ Original texts:
 Return optimized texts (one per line):"""
 
             response_text = self._call_gemini_with_retry(prompt, temperature=0.3)
+            
+            # CHECK AFTER API CALL
+            if cancel_flag and task_id and cancel_flag.get(task_id):
+                logger.info(f"Optimization cancelled after API call")
+                return texts
 
             # Parse numbered results robustly
             optimized = self._parse_numbered_response(response_text, expected=len(texts))
@@ -211,9 +222,14 @@ Return optimized texts (one per line):"""
             logger.error(f"Text optimization error: {e}")
             return texts
 
-    def rewrite_text_batch(self, texts: List[str]) -> List[str]:
+    def rewrite_text_batch(self, texts: List[str], cancel_flag: Dict = None, task_id: str = None) -> List[str]:
         """Rewrite a batch of texts with different structure but same meaning"""
         try:
+            # CHECK BEFORE API CALL
+            if cancel_flag and task_id and cancel_flag.get(task_id):
+                logger.info(f"Rewrite cancelled before API call")
+                return texts
+
             original_lines = "\n".join([f"{i+1}. {t}" for i, t in enumerate(texts)])
             prompt = f"""Rewrite these English subtitle texts with different sentence structures, but keep the exact same meaning.
 
@@ -232,7 +248,18 @@ Original texts:
 
 Return rewritten texts (one per line):"""
 
-            response_text = self._call_gemini_with_retry(prompt, temperature=0.7)
+            response_text = self._call_gemini_with_retry(
+                prompt,
+                temperature=0.7,
+                max_retries=3,
+                cancel_flag=cancel_flag,
+                task_id=task_id
+            )
+
+            # CHECK AFTER API CALL
+            if cancel_flag and task_id and cancel_flag.get(task_id):
+                logger.info(f"Rewrite cancelled after API call")
+                return texts
 
             rewritten = self._parse_numbered_response(response_text, expected=len(texts))
 
@@ -283,9 +310,12 @@ Return rewritten texts (one per line):"""
 
         return items
 
-    def _call_gemini_with_retry(self, prompt: str, temperature: float = 0.3, max_retries: int = 3) -> str:
+    def _call_gemini_with_retry(self, prompt: str, temperature: float = 0.3, max_retries: int = 3, cancel_flag: Dict = None, task_id: str = None) -> str:
         """Call Gemini API with retry logic for rate limits"""
         for attempt in range(max_retries):
+            if cancel_flag and task_id and cancel_flag.get(task_id):
+                logger.info(f"Gemini call cancelled at attempt {attempt+1}")
+                raise InterruptedError("Task cancelled")
             try:
                 response = self.model.generate_content(
                     prompt,
@@ -311,7 +341,11 @@ Return rewritten texts (one per line):"""
 
                     if attempt < max_retries - 1:
                         logger.warning(f"Rate limit detected. Waiting {wait_time}s before retrying...")
-                        time.sleep(wait_time)
+                        for _ in range(wait_time):
+                            if cancel_flag and task_id and cancel_flag.get(task_id):
+                                logger.info("Cancelled during rate limit wait")
+                                raise InterruptedError("Task cancelled")
+                            time.sleep(1)
                         continue
                     else:
                         logger.error("Rate limit persisted after retries.")
@@ -379,6 +413,7 @@ Return rewritten texts (one per line):"""
         rewrite_sentences: bool = True,
         progress_callback=None,
         cancel_flag: Dict = None,
+        task_id: str = None
     ) -> Tuple[str, Dict]:
         """
         Complete subtitle enhancement pipeline
@@ -386,6 +421,18 @@ Return rewritten texts (one per line):"""
         Returns:
             tuple: (enhanced_srt_content, stats)
         """
+        def emit_progress(progress, step, message, **kwargs):
+            """Emit progress update"""
+            if cancel_flag and cancel_flag.get(task_id):
+                raise InterruptedError("Enhancement cancelled")
+            
+            if progress_callback:
+                progress_callback(progress, step, message, **kwargs)
+            
+            # IMPORTANT: Sleep để flush event
+            eventlet.sleep(0)
+            eventlet.sleep(0)  # Double sleep for better reliability
+        
         stats = {
             "original_lines": 0,
             "merged_lines": 0,
@@ -460,7 +507,11 @@ Return rewritten texts (one per line):"""
                     )
 
                 texts = [seg["text"] for seg in batch]
-                optimized_texts = self.optimize_text_batch(texts)
+                optimized_texts = self.optimize_text_batch(
+                    texts,
+                    cancel_flag=cancel_flag,
+                    task_id=task_id
+                )
 
                 for seg, opt_text in zip(batch, optimized_texts):
                     optimized_segments.append(
@@ -510,7 +561,11 @@ Return rewritten texts (one per line):"""
                         stats={"processedLines": b},
                     )
 
-                rewritten_batch = self.rewrite_text_batch(batch)
+                rewritten_batch = self.rewrite_text_batch(
+                    batch,
+                    cancel_flag=cancel_flag,
+                    task_id=task_id
+                )
                 rewritten_texts.extend(rewritten_batch)
 
             # Place rewritten texts back into rewritten_segments at right positions
@@ -542,3 +597,19 @@ Return rewritten texts (one per line):"""
             progress_callback(100, "Complete", "Enhancement complete!")
 
         return enhanced_srt, stats
+    
+    def strip_timelines_one_line(self, srt_content: str) -> str:
+        """
+		Remove timeline and index from SRT, return pure text in one single line.
+		"""
+        texts = []
+        for line in srt_content.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if re.match(r"^\d+$", line):  # index
+                continue
+            if re.match(r"^\d{2}:\d{2}:\d{2},\d{3}", line):  # timeline
+                continue
+            texts.append(line)
+        return " ".join(texts)
