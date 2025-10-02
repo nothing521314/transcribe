@@ -7,7 +7,9 @@ import logging
 import eventlet
 from datetime import datetime
 from flask import Blueprint, render_template, request, jsonify, send_file
+
 from subtitle_enhancer import SubtitleEnhancer
+from shared_state import processing_tasks, cancel_flags
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +17,7 @@ logger = logging.getLogger(__name__)
 enhance_subtitle_bp = Blueprint('enhance_subtitle', __name__)
 
 
-def init_enhance_routes(app, socketio, processing_tasks, cancel_flags, OUTPUT_FOLDER, cleanup_task):
+def init_enhance_routes(app, socketio, OUTPUT_FOLDER, cleanup_task):
     """Initialize enhancement routes with dependencies"""
     
     @enhance_subtitle_bp.route("/enhance_subtitle", methods=["GET"])
@@ -63,8 +65,6 @@ def init_enhance_routes(app, socketio, processing_tasks, cancel_flags, OUTPUT_FO
                 optimize_text,
                 rewrite_sentences,
                 socketio,
-                processing_tasks,
-                cancel_flags,
                 OUTPUT_FOLDER,
                 cleanup_task,
                 original_name
@@ -117,11 +117,16 @@ def init_enhance_routes(app, socketio, processing_tasks, cancel_flags, OUTPUT_FO
     app.register_blueprint(enhance_subtitle_bp)
     logger.info("Enhancement routes registered")
 
+    if 'enhance_subtitle' not in app.blueprints:
+        app.register_blueprint(enhance_subtitle_bp)
+        logger.info("Enhancement routes registered")
+    else:
+        logger.warning("Enhancement blueprint already registered, skipping")
+
 
 def enhance_subtitle_task(task_id, srt_content, api_key, merge_lines, 
                          optimize_text, rewrite_sentences, socketio,
-                         processing_tasks, cancel_flags, OUTPUT_FOLDER,
-                         cleanup_task, original_filename=None):
+                         OUTPUT_FOLDER, cleanup_task, original_filename=None):
     """Background task for subtitle enhancement"""
     try:
         # WAIT for client to join room (with timeout)

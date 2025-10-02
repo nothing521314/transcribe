@@ -94,10 +94,10 @@
 	<div x-data="enhanceSubtitleApp()" x-init="init()" x-cloak class="container mx-auto px-4 md:px-24 py-8">
 		<!-- Header -->
 		<header class="text-center mb-12">
-			<h1 class="text-4xl md:text-5xl font-bold mb-4">✨ Enhanced English Subtitle Optimizer</h1>
-			<p class="text-lg md:text-xl opacity-90">Merge, optimize, and rewrite your subtitles intelligently</p>
+			<h1 class="text-4xl md:text-5xl font-bold mb-4">✨ Trình Tối Ưu Phụ Đề Tiếng Anh Nâng Cao</h1>
+			<p class="text-lg md:text-xl opacity-90">Gộp, tối ưu và viết lại phụ đề một cách thông minh</p>
 			<div class="mt-4">
-				<span class="text-sm">Status: </span>
+				<span class="text-sm">Trạng thái: </span>
 				<span :class="connectionStatus === 'connected' ? 'text-green-400' : 'text-red-400'" x-text="connectionStatus"
 					class="font-semibold"></span>
 			</div>
@@ -106,18 +106,18 @@
 		<!-- Navigation -->
 		<div class="mb-6 flex justify-end space-x-4">
 			<a href="/" class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
-				<i class="fas fa-home mr-2"></i>Home
+				<i class="fas fa-home mr-2"></i>Trang Chủ
 			</a>
 			<button @click="clearCache()"
 				class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
-				<i class="fas fa-trash mr-2"></i>Clear Cache
+				<i class="fas fa-trash mr-2"></i>Xoá Bộ Nhớ Tạm
 			</button>
 		</div>
 
 		<!-- Upload Section -->
 		<div class="glass-effect rounded-xl p-6 mb-8">
 			<h3 class="text-xl font-bold mb-4">
-				<i class="fas fa-file-upload text-purple-400 mr-2"></i>Upload English SRT File
+				<i class="fas fa-file-upload text-purple-400 mr-2"></i>Tải Tệp Phụ Đề Tiếng Anh (.SRT)
 			</h3>
 
 			<div class="space-y-4">
@@ -127,8 +127,8 @@
 					@click="$refs.fileInput.click()">
 					<input type="file" x-ref="fileInput" @change="handleFileUpload($event)" accept=".srt" class="hidden" />
 					<i class="fas fa-cloud-upload-alt text-5xl mb-4 text-purple-400"></i>
-					<p class="text-lg mb-2">Click to upload or drag and drop</p>
-					<p class="text-sm text-white/60">English SRT subtitle file only</p>
+					<p class="text-lg mb-2">Nhấn để tải lên hoặc kéo thả vào đây</p>
+					<p class="text-sm text-white/60">Chỉ hỗ trợ tệp phụ đề tiếng Anh định dạng .srt</p>
 					<div x-show="fileName" class="mt-4 text-green-400">
 						<i class="fas fa-check-circle mr-2"></i>
 						<span x-text="fileName"></span>
@@ -138,13 +138,13 @@
 				<!-- API Key Input -->
 				<div>
 					<label class="block text-sm font-medium mb-2">
-						<i class="fas fa-key text-yellow-400 mr-2"></i>Gemini API Key (Required for optimization & rewriting)
+						<i class="fas fa-key text-yellow-400 mr-2"></i>Khóa API Gemini (Cần thiết để tối ưu & viết lại)
 					</label>
 					<textarea x-model="apiKey" placeholder="Enter your Gemini API key here..." rows="3"
 						class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:border-purple-400 focus:outline-none resize-none"></textarea>
 					<p class="text-xs text-white/60 mt-2">
 						<i class="fas fa-info-circle mr-1"></i>
-						Get your free API key from <a href="https://makersuite.google.com/app/apikey" target="_blank"
+						Nhận khóa API miễn phí từ <a href="https://makersuite.google.com/app/apikey" target="_blank"
 							class="text-blue-400 hover:underline">Google AI Studio</a>
 					</p>
 				</div>
@@ -153,15 +153,15 @@
 				<div class="grid md:grid-cols-2 gap-4">
 					<label class="flex items-center space-x-3 cursor-pointer">
 						<input type="checkbox" x-model="options.mergeLines" class="w-5 h-5 rounded" />
-						<span>Merge consecutive lines (reduce by 50%)</span>
+						<span>Gộp dòng phụ đề liên tiếp (giảm 50%)</span>
 					</label>
 					<label class="flex items-center space-x-3 cursor-pointer">
 						<input type="checkbox" x-model="options.optimizeText" class="w-5 h-5 rounded" />
-						<span>Optimize spelling & punctuation</span>
+						<span>Tối ưu chính tả & dấu câu</span>
 					</label>
 					<label class="flex items-center space-x-3 cursor-pointer">
 						<input type="checkbox" x-model="options.rewriteSentences" class="w-5 h-5 rounded" />
-						<span>Rewrite every 3 sentences</span>
+						<span>Viết lại sau mỗi 3 câu</span>
 					</label>
 				</div>
 
@@ -169,10 +169,10 @@
 				<div class="bg-blue-500/20 border border-blue-400/30 rounded-lg p-4">
 					<p class="text-sm text-blue-200">
 						<i class="fas fa-info-circle mr-2"></i>
-						<strong>Processing Steps:</strong><br />
-						1. Merge even lines with odd lines (1000→500 lines)<br />
-						2. Fix spelling, remove special chars, add proper punctuation<br />
-						3. Rewrite every 3 sentences with different structure
+						<strong>Các bước xử lý:</strong><br />
+						1. Gộp dòng lẻ và dòng chẵn (1000→500 dòng)<br />
+						2. Sửa chính tả, loại bỏ ký tự đặc biệt, thêm dấu câu chính xác<br />
+						3. Viết lại sau mỗi 3 câu với cấu trúc khác biệt
 					</p>
 				</div>
 			</div>
@@ -183,10 +183,10 @@
 			<button @click="submitForm()" :disabled="processing || !fileName || !apiKey"
 				class="btn-primary px-8 py-4 rounded-xl font-bold text-lg shadow-lg">
 				<template x-if="!processing">
-					<span><i class="fas fa-magic mr-2"></i>Enhance Subtitle</span>
+					<span><i class="fas fa-magic mr-2"></i>Tối Ưu Phụ Đề</span>
 				</template>
 				<template x-if="processing">
-					<span><i class="fas fa-spinner fa-spin mr-2"></i>Processing...</span>
+					<span><i class="fas fa-spinner fa-spin mr-2"></i>Đang xử lý...</span>
 				</template>
 			</button>
 		</div>
@@ -200,8 +200,8 @@
 						class="w-20 h-20 mx-auto mb-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
 						<i class="fas fa-cog fa-spin text-3xl text-white"></i>
 					</div>
-					<h3 class="text-3xl font-bold mb-2">Enhancing Subtitle</h3>
-					<p class="text-white/80" x-text="currentMessage"></p>
+					<h3 class="text-3xl font-bold mb-2">Đang Tối Ưu Phụ Đề</h3>
+					<p class="text-white/80 whitespace-pre-line" x-text="currentMessage"></p>
 				</div>
 
 				<!-- Progress Bar -->
@@ -226,15 +226,15 @@
 				<div class="grid grid-cols-3 gap-4 mb-6">
 					<div class="bg-white/5 rounded-lg p-4 text-center">
 						<div class="text-2xl font-bold text-blue-400" x-text="stats.originalLines"></div>
-						<div class="text-xs text-white/60">Original Lines</div>
+						<div class="text-xs text-white/60">Số dòng gốc</div>
 					</div>
 					<div class="bg-white/5 rounded-lg p-4 text-center">
 						<div class="text-2xl font-bold text-green-400" x-text="stats.mergedLines"></div>
-						<div class="text-xs text-white/60">After Merge</div>
+						<div class="text-xs text-white/60">Sau khi gộp</div>
 					</div>
 					<div class="bg-white/5 rounded-lg p-4 text-center">
 						<div class="text-2xl font-bold text-purple-400" x-text="stats.processedLines"></div>
-						<div class="text-xs text-white/60">Processed</div>
+						<div class="text-xs text-white/60">Đã xử lý</div>
 					</div>
 				</div>
 
@@ -242,19 +242,19 @@
 				<div x-show="processingStatus === 'completed'" class="mb-6">
 					<div class="bg-green-500/20 border border-green-400/30 rounded-lg p-6 text-center">
 						<i class="fas fa-check-circle text-5xl text-green-400 mb-4"></i>
-						<h4 class="text-2xl font-bold text-green-400 mb-2">Enhancement Complete!</h4>
-						<p class="text-white/80">Your enhanced subtitle is ready</p>
+						<h4 class="text-2xl font-bold text-green-400 mb-2">Hoàn Tất Tối Ưu!</h4>
+						<p class="text-white/80">Phụ đề đã được tối ưu sẵn sàng để tải về</p>
 					</div>
 
 					<div class="grid md:grid-cols-2 gap-4 mt-6">
 						<a :href="`${resultBaseUrl}/srt`" download>
 							<button class="w-full btn-primary px-6 py-4 rounded-xl font-bold text-lg shadow-lg">
-								<i class="fas fa-download mr-2"></i>Download Subtitle (.srt)
+								<i class="fas fa-download mr-2"></i>Tải phụ đề (.srt)
 							</button>
 						</a>
 						<a :href="`${resultBaseUrl}/txt`" download>
 							<button class="w-full btn-primary px-6 py-4 rounded-xl font-bold text-lg shadow-lg">
-								<i class="fas fa-download mr-2"></i>Download Text (.txt)
+								<i class="fas fa-download mr-2"></i>Tải văn bản (.txt)
 							</button>
 						</a>
 					</div>
@@ -264,21 +264,26 @@
 				<div x-show="processingStatus === 'error'" class="mb-6">
 					<div class="bg-red-500/20 border border-red-400/30 rounded-lg p-6 text-center">
 						<i class="fas fa-exclamation-circle text-5xl text-red-400 mb-4"></i>
-						<h4 class="text-2xl font-bold text-red-400 mb-2">Processing Failed</h4>
+						<h4 class="text-2xl font-bold text-red-400 mb-2">Xử Lý Thất Bại</h4>
 						<p class="text-white/80" x-text="currentMessage"></p>
 					</div>
 				</div>
 
 				<!-- Action Buttons -->
 				<div class="flex justify-center space-x-4 mt-6">
-					<button x-show="processingStatus === 'processing'" @click="cancelProcess()"
+					<button x-show="processingStatus === 'processing' || processingStatus === 'cancelled" @click="cancelProcess()"
 						class="px-6 py-3 bg-red-500/20 border border-red-400/30 rounded-lg text-red-400 hover:bg-red-500/30 transition-colors">
-						<i class="fas fa-stop mr-2"></i>Cancel
+						<i class="fas fa-stop mr-2"></i>Huỷ
 					</button>
 
-					<button x-show="processingStatus !== 'processing'" @click="resetForm()"
+					<button x-show="processingStatus === 'completed'" @click="resetForm()"
 						class="px-6 py-3 bg-blue-500/20 border border-blue-400/30 rounded-lg text-blue-400 hover:bg-blue-500/30 transition-colors">
-						<i class="fas fa-redo mr-2"></i>Process Another
+						<i class="fas fa-redo mr-2"></i>Quá trình khác
+					</button>
+
+					<button x-show="processingStatus === 'cancelled'" @click="submitForm()"
+						class="px-6 py-3 bg-blue-500/20 border border-blue-400/30 rounded-lg text-blue-400 hover:bg-blue-500/30 transition-colors">
+						<i class="fas fa-redo mr-2"></i>Thử lại
 					</button>
 				</div>
 			</div>
@@ -289,7 +294,7 @@
 		function enhanceSubtitleApp() {
 			return {
 				socket: null,
-				connectionStatus: "disconnected",
+				connectionStatus: "Đã ngắt kết nối",
 
 				fileName: "",
 				fileContent: null,
@@ -306,7 +311,7 @@
 				processingStatus: "",
 				progress: 0,
 				currentStep: "",
-				currentMessage: "Initializing...",
+				currentMessage: "Đang khởi tạo...",
 
 				stats: {
 					originalLines: 0,
@@ -334,12 +339,12 @@
 						});
 
 						this.socket.on("connect", () => {
-							this.connectionStatus = "connected";
+							this.connectionStatus = "Đã kết nối";
 							console.log("WebSocket connected:", this.socket.id);
 						});
 
 						this.socket.on("disconnect", (reason) => {
-							this.connectionStatus = "disconnected";
+							this.connectionStatus = "Đã ngắt kết nối";
 							console.log("WebSocket disconnected:", reason);
 						});
 
@@ -353,11 +358,17 @@
 								this.stats = { ...this.stats, ...data.stats };
 							}
 
-							if (data.status === "completed") {
-								this.processingStatus = "completed";
-								this.resultBaseUrl = data.download_base_url || "";
-							} else if (data.status === "error") {
-								this.processingStatus = "error";
+							switch (data.status) {
+								case "cancelled":
+									this.processingStatus = "cancelled";
+									break;
+								case "completed":
+									this.processingStatus = "completed";
+									this.resultBaseUrl = data.download_base_url || "";
+									break;
+								case "error":
+									this.processingStatus = "error";
+									break;
 							}
 						});
 
@@ -428,7 +439,10 @@
 				},
 
 				async cancelProcess() {
-					if (!this.currentTaskId) return;
+					if (!this.currentTaskId) {
+						this.resetForm();
+						return;
+					}
 
 					if (confirm("Are you sure you want to cancel?")) {
 						try {

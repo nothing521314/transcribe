@@ -17,6 +17,9 @@ class SubtitleEnhancer:
         genai.configure(api_key=api_key)
         # keep the chosen model; change model name if needed
         self.model = genai.GenerativeModel("gemini-2.5-flash")
+        
+        # Track total retries across all batches for a task
+        self.total_retries_count = {}
         logger.info("SubtitleEnhancer initialized")
 
     def parse_srt(self, srt_content: str) -> List[Dict]:
@@ -171,9 +174,14 @@ class SubtitleEnhancer:
         logger.info(f"Merged {len(segments)} segments into {len(merged)}")
         return merged
 
-    def optimize_text_batch(self, texts: List[str], cancel_flag: Dict = None, task_id: str = None) -> List[str]:
+    def optimize_text_batch(self, texts: List[str], cancel_flag: Dict = None, 
+                            task_id: str = None, progress_callback = None,
+                            progress_callback_offset: int = 0) -> List[str]:
         """Optimize text batch with Gemini"""
         try:
+            if cancel_flag is None:
+                from shared_state import cancel_flags
+                cancel_flag = cancel_flags
             # CHECK BEFORE API CALL
             if cancel_flag and task_id and cancel_flag.get(task_id):
                 logger.info(f"Optimization cancelled before API call")
@@ -197,7 +205,14 @@ Original texts:
 
 Return optimized texts (one per line):"""
 
-            response_text = self._call_gemini_with_retry(prompt, temperature=0.3)
+            response_text = self._call_gemini_with_retry(
+                prompt, 
+                temperature=0.3, 
+                cancel_flag=cancel_flag, 
+                task_id=task_id,
+                progress_callback=progress_callback,
+                progress_callback_offset=progress_callback_offset
+            )
             
             # CHECK AFTER API CALL
             if cancel_flag and task_id and cancel_flag.get(task_id):
@@ -222,7 +237,9 @@ Return optimized texts (one per line):"""
             logger.error(f"Text optimization error: {e}")
             return texts
 
-    def rewrite_text_batch(self, texts: List[str], cancel_flag: Dict = None, task_id: str = None) -> List[str]:
+    def rewrite_text_batch(self, texts: List[str], cancel_flag: Dict = None, 
+                           task_id: str = None, progress_callback = None,
+                           progress_callback_offset: int = 0) -> List[str]:
         """Rewrite a batch of texts with different structure but same meaning"""
         try:
             # CHECK BEFORE API CALL
@@ -253,7 +270,9 @@ Return rewritten texts (one per line):"""
                 temperature=0.7,
                 max_retries=3,
                 cancel_flag=cancel_flag,
-                task_id=task_id
+                task_id=task_id,
+                progress_callback=progress_callback,
+                progress_callback_offset=progress_callback_offset
             )
 
             # CHECK AFTER API CALL
@@ -310,12 +329,32 @@ Return rewritten texts (one per line):"""
 
         return items
 
-    def _call_gemini_with_retry(self, prompt: str, temperature: float = 0.3, max_retries: int = 3, cancel_flag: Dict = None, task_id: str = None) -> str:
+    def _call_gemini_with_retry(self, prompt: str, temperature: float = 0.3, 
+                                max_retries: int = 3, cancel_flag: Dict = None, 
+                                task_id: str = None, progress_callback = None,
+                                progress_callback_offset: int = 0) -> str:
         """Call Gemini API with retry logic for rate limits"""
+        # Initialize retry counter for this task if not exists
+        if task_id and task_id not in self.total_retries_count:
+            self.total_retries_count[task_id] = 0
+
         for attempt in range(max_retries):
             if cancel_flag and task_id and cancel_flag.get(task_id):
                 logger.info(f"Gemini call cancelled at attempt {attempt+1}")
                 raise InterruptedError("Task cancelled")
+
+            if task_id and self.total_retries_count[task_id] >= 3:
+                logger.error(f"Total retry limit (3) reached across all batches for task {task_id}")
+                if cancel_flag and task_id:
+                    cancel_flag[task_id] = True
+                if progress_callback:
+                    progress_callback(
+                        progress_callback_offset,
+                        "Failed",
+                        f"Task cancelled: Maximum retry limit (3) reached across all batches"
+                    )
+                raise RuntimeError(f"Task {task_id} cancelled after 3 total retries across batches")
+
             try:
                 response = self.model.generate_content(
                     prompt,
@@ -324,11 +363,34 @@ Return rewritten texts (one per line):"""
                         max_output_tokens=2000,
                     ),
                 )
+                # Success - reset retry count for this task
+                if task_id:
+                    self.total_retries_count[task_id] = 0
                 return self._extract_response_text(response)
 
             except Exception as e:
                 error_msg = str(e)
-                logger.warning(f"Gemini call attempt {attempt+1}/{max_retries} failed: {error_msg}")
+                
+                # Increment total retry counter
+                if task_id:
+                    self.total_retries_count[task_id] += 1
+                    total_retries = self.total_retries_count[task_id]
+                    logger.warning(f"Gemini call failed. Total retries for task: {total_retries}/3")
+                    
+                    # Check if we've hit the global retry limit
+                    if total_retries >= 3:
+                        logger.error(f"Total retry limit (3) reached for task {task_id}. Cancelling entire task.")
+                        if cancel_flag:
+                            cancel_flag[task_id] = True
+                        if progress_callback:
+                            progress_callback(
+                                progress_callback_offset,
+                                "Failed", 
+                                f"Task cancelled after 3 total API retry attempts.\nError: {error_msg.split('.')[0]}"
+                            )
+                        raise RuntimeError(f"Task {task_id} cancelled after 3 total retries: {error_msg}")
+                
+                logger.warning(f"Gemini call attempt {attempt+1}/{max_retries} failed (total task retries: {self.total_retries_count.get(task_id, 0)}/3): {error_msg}")
 
                 # Check rate-limit-like messages
                 if "429" in error_msg or "quota" in error_msg.lower() or "rate limit" in error_msg.lower():
@@ -341,20 +403,37 @@ Return rewritten texts (one per line):"""
 
                     if attempt < max_retries - 1:
                         logger.warning(f"Rate limit detected. Waiting {wait_time}s before retrying...")
+                        if progress_callback:
+                            remaining_global = 3 - self.total_retries_count.get(task_id, 0)
+                            progress_callback(
+                                progress_callback_offset,
+                                "Waiting",
+                                f"Rate limit hit (total retries: {self.total_retries_count.get(task_id, 0)}/3)\nWaiting {wait_time}s before retry..."
+                            )
                         for _ in range(wait_time):
                             if cancel_flag and task_id and cancel_flag.get(task_id):
                                 logger.info("Cancelled during rate limit wait")
+                                if progress_callback:
+                                    progress_callback(
+                                        progress_callback_offset,
+                                        "Cancelled",
+                                        "Cancelled during rate limit wait"
+                                    )
                                 raise InterruptedError("Task cancelled")
                             time.sleep(1)
                         continue
-                    else:
-                        logger.error("Rate limit persisted after retries.")
-                        raise
                 else:
-                    # For other errors, do not retry
-                    logger.error("Non-rate-limit Gemini error, not retrying further.")
-                    raise
-
+                    # For non-rate-limit errors, still check total retries
+                    if attempt < max_retries - 1 and (not task_id or self.total_retries_count.get(task_id, 0) < 3):
+                        if progress_callback:
+                            remaining_global = 3 - self.total_retries_count.get(task_id, 0)
+                            progress_callback(
+                                progress_callback_offset,
+                                "Error",
+                                f"API error (total retries: {self.total_retries_count.get(task_id, 0)}/3): {error_msg.split('.')[0]}"
+                            )
+                        time.sleep(2)
+                        continue
         return ""
 
     def _extract_response_text(self, response) -> str:
@@ -421,17 +500,6 @@ Return rewritten texts (one per line):"""
         Returns:
             tuple: (enhanced_srt_content, stats)
         """
-        def emit_progress(progress, step, message, **kwargs):
-            """Emit progress update"""
-            if cancel_flag and cancel_flag.get(task_id):
-                raise InterruptedError("Enhancement cancelled")
-            
-            if progress_callback:
-                progress_callback(progress, step, message, **kwargs)
-            
-            # IMPORTANT: Sleep để flush event
-            eventlet.sleep(0)
-            eventlet.sleep(0)  # Double sleep for better reliability
         
         stats = {
             "original_lines": 0,
@@ -440,163 +508,174 @@ Return rewritten texts (one per line):"""
             "rewritten_lines": 0,
         }
 
-        # Parse
-        if progress_callback:
-            progress_callback(5, "Parsing", "Parsing SRT file...")
+        try:
 
-        segments = self.parse_srt(srt_content)
-        stats["original_lines"] = len(segments)
-
-        if progress_callback:
-            progress_callback(
-                10,
-                "Parsing",
-                f"Found {len(segments)} segments",
-                stats={"originalLines": len(segments)},
-            )
-
-        # Merge
-        if merge_lines:
+            # Parse
             if progress_callback:
-                progress_callback(15, "Merging", "Merging consecutive lines...")
+                progress_callback(5, "Parsing", "Parsing SRT file...")
 
-            segments = self.merge_lines(segments)
-            stats["merged_lines"] = len(segments)
+            segments = self.parse_srt(srt_content)
+            stats["original_lines"] = len(segments)
 
             if progress_callback:
                 progress_callback(
-                    30,
-                    "Merging",
-                    f"Merged to {len(segments)} segments",
-                    stats={"mergedLines": len(segments)},
-                )
-        else:
-            stats["merged_lines"] = stats["original_lines"]
-            if progress_callback:
-                progress_callback(
-                    30,
-                    "Merging",
-                    "Skipping merge step",
-                    stats={"mergedLines": len(segments)},
+                    10,
+                    "Parsing",
+                    f"Found {len(segments)} segments",
+                    stats={"originalLines": len(segments)},
                 )
 
-        # Optimize
-        if optimize_text:
-            if progress_callback:
-                progress_callback(35, "Optimizing", "Optimizing text...")
+            # Merge
+            if merge_lines:
+                if progress_callback:
+                    progress_callback(15, "Merging", "Merging consecutive lines...")
 
-            optimized_segments = []
-            batch_size = 20
-
-            for i in range(0, len(segments), batch_size):
-                if cancel_flag and cancel_flag.get("cancelled", False):
-                    logger.warning("Enhancement cancelled during optimize step")
-                    return "", {**stats, "cancelled": True}
-
-                batch = segments[i : i + batch_size]
-                batch_num = i // batch_size + 1
-                total_batches = (len(segments) + batch_size - 1) // batch_size
+                segments = self.merge_lines(segments)
+                stats["merged_lines"] = len(segments)
 
                 if progress_callback:
-                    batch_progress = 35 + ((i / max(1, len(segments))) * 25)
                     progress_callback(
-                        batch_progress,
+                        30,
+                        "Merging",
+                        f"Merged to {len(segments)} segments",
+                        stats={"mergedLines": len(segments)},
+                    )
+            else:
+                stats["merged_lines"] = stats["original_lines"]
+                if progress_callback:
+                    progress_callback(
+                        30,
+                        "Merging",
+                        "Skipping merge step",
+                        stats={"mergedLines": len(segments)},
+                    )
+
+            # Optimize
+            if optimize_text:
+                if progress_callback:
+                    progress_callback(35, "Optimizing", "Optimizing text...")
+
+                optimized_segments = []
+                batch_size = 20
+
+                for i in range(0, len(segments), batch_size):
+                    if cancel_flag and cancel_flag.get("cancelled", False):
+                        logger.warning("Enhancement cancelled during optimize step")
+                        return "", {**stats, "cancelled": True}
+
+                    batch = segments[i : i + batch_size]
+                    batch_num = i // batch_size + 1
+                    total_batches = (len(segments) + batch_size - 1) // batch_size
+
+                    if progress_callback:
+                        batch_progress = 35 + ((i / max(1, len(segments))) * 25)
+                        progress_callback(
+                            batch_progress,
+                            "Optimizing",
+                            f"Optimizing batch {batch_num}/{total_batches}...",
+                            stats={"processedLines": i},
+                        )
+
+                    texts = [seg["text"] for seg in batch]
+                    optimized_texts = self.optimize_text_batch(
+                        texts,
+                        cancel_flag=cancel_flag,
+                        task_id=task_id,
+                        progress_callback=progress_callback,
+                        progress_callback_offset=batch_progress
+                    )
+
+                    for seg, opt_text in zip(batch, optimized_texts):
+                        optimized_segments.append(
+                            {"start": seg["start"], "end": seg["end"], "text": opt_text}
+                        )
+
+                segments = optimized_segments
+                stats["optimized_lines"] = len(segments)
+
+                if progress_callback:
+                    progress_callback(
+                        60,
                         "Optimizing",
-                        f"Optimizing batch {batch_num}/{total_batches}...",
-                        stats={"processedLines": i},
+                        "Optimization complete",
+                        stats={"processedLines": len(segments)},
                     )
+            else:
+                stats["optimized_lines"] = stats["merged_lines"]
+                if progress_callback:
+                    progress_callback(60, "Optimizing", "Skipping optimization")
 
-                texts = [seg["text"] for seg in batch]
-                optimized_texts = self.optimize_text_batch(
-                    texts,
-                    cancel_flag=cancel_flag,
-                    task_id=task_id
-                )
+            # Rewrite - only 1 out of each 3 sentences (i.e., 3rd, 6th, 9th, ...)
+            if rewrite_sentences:
+                if progress_callback:
+                    progress_callback(65, "Rewriting", "Rewriting sentences...")
 
-                for seg, opt_text in zip(batch, optimized_texts):
-                    optimized_segments.append(
-                        {"start": seg["start"], "end": seg["end"], "text": opt_text}
+                # Get indices of sentences to rewrite
+                rewrite_indices = [i for i in range(len(segments)) if i % 3 == 0]
+                texts_to_rewrite = [segments[i]["text"] for i in rewrite_indices]
+
+                rewritten_texts = []
+                batch_size = 20
+                total_batches = (len(texts_to_rewrite) + batch_size - 1) // batch_size
+
+                for b in range(0, len(texts_to_rewrite), batch_size):
+                    if cancel_flag and cancel_flag.get("cancelled", False):
+                        logger.warning("Enhancement cancelled during rewrite step")
+                        return "", {**stats, "cancelled": True}
+                    batch = texts_to_rewrite[b:b+batch_size]
+                    batch_num = b // batch_size + 1
+                    batch_progress = 65 + ((b / len(texts_to_rewrite)) * 30)
+
+                    if progress_callback:
+                        progress_callback(
+                            batch_progress,
+                            "Rewriting",
+                            f"Rewriting batch {batch_num}/{total_batches}...",
+                            stats={"processedLines": b},
+                        )
+
+                    rewritten_batch = self.rewrite_text_batch(
+                        batch,
+                        cancel_flag=cancel_flag,
+                        task_id=task_id,
+                        progress_callback=progress_callback,
+                        progress_callback_offset=batch_progress
                     )
+                    rewritten_texts.extend(rewritten_batch)
 
-            segments = optimized_segments
-            stats["optimized_lines"] = len(segments)
+                # Place rewritten texts back into rewritten_segments at right positions
+                for idx, new_text in zip(rewrite_indices, rewritten_texts):
+                    segments[idx]["text"] = new_text
 
-            if progress_callback:
-                progress_callback(
-                    60,
-                    "Optimizing",
-                    "Optimization complete",
-                    stats={"processedLines": len(segments)},
-                )
-        else:
-            stats["optimized_lines"] = stats["merged_lines"]
-            if progress_callback:
-                progress_callback(60, "Optimizing", "Skipping optimization")
-
-        # Rewrite - only 1 out of each 3 sentences (i.e., 3rd, 6th, 9th, ...)
-        if rewrite_sentences:
-            if progress_callback:
-                progress_callback(65, "Rewriting", "Rewriting sentences...")
-
-            # Get indices of sentences to rewrite
-            rewrite_indices = [i for i in range(len(segments)) if i % 3 == 0]
-            texts_to_rewrite = [segments[i]["text"] for i in rewrite_indices]
-
-            rewritten_texts = []
-            batch_size = 20
-            total_batches = (len(texts_to_rewrite) + batch_size - 1) // batch_size
-
-            for b in range(0, len(texts_to_rewrite), batch_size):
-                if cancel_flag and cancel_flag.get("cancelled", False):
-                    logger.warning("Enhancement cancelled during rewrite step")
-                    return "", {**stats, "cancelled": True}
-                batch = texts_to_rewrite[b:b+batch_size]
-                batch_num = b // batch_size + 1
+                stats["rewritten_lines"] = len(rewrite_indices)
 
                 if progress_callback:
                     progress_callback(
-                        65 + ((b / len(texts_to_rewrite)) * 30),
+                        95,
                         "Rewriting",
-                        f"Rewriting batch {batch_num}/{total_batches}...",
-                        stats={"processedLines": b},
+                        f"Rewriting complete ({len(rewrite_indices)} lines rewritten)",
+                        stats={"processedLines": len(rewrite_indices)},
                     )
+            else:
+                stats["rewritten_lines"] = 0
+                if progress_callback:
+                    progress_callback(95, "Rewriting", "Skipping rewrite")
 
-                rewritten_batch = self.rewrite_text_batch(
-                    batch,
-                    cancel_flag=cancel_flag,
-                    task_id=task_id
-                )
-                rewritten_texts.extend(rewritten_batch)
 
-            # Place rewritten texts back into rewritten_segments at right positions
-            for idx, new_text in zip(rewrite_indices, rewritten_texts):
-                segments[idx]["text"] = new_text
+            # Finalize
+            if progress_callback:
+                progress_callback(97, "Finalizing", "Creating enhanced subtitle...")
 
-            stats["rewritten_lines"] = len(rewrite_indices)
+            enhanced_srt = self.create_srt_content(segments)
 
             if progress_callback:
-                progress_callback(
-                    95,
-                    "Rewriting",
-                    f"Rewriting complete ({len(rewrite_indices)} lines rewritten)",
-                    stats={"processedLines": len(rewrite_indices)},
-                )
-        else:
-            stats["rewritten_lines"] = 0
-            if progress_callback:
-                progress_callback(95, "Rewriting", "Skipping rewrite")
+                progress_callback(100, "Complete", "Enhancement complete!")
 
-
-        # Finalize
-        if progress_callback:
-            progress_callback(97, "Finalizing", "Creating enhanced subtitle...")
-
-        enhanced_srt = self.create_srt_content(segments)
-
-        if progress_callback:
-            progress_callback(100, "Complete", "Enhancement complete!")
-
-        return enhanced_srt, stats
+            return enhanced_srt, stats
+        finally:
+            # Clean up retry counter for this task
+            if task_id and task_id in self.total_retries_count:
+                del self.total_retries_count[task_id]
     
     def strip_timelines_one_line(self, srt_content: str) -> str:
         """

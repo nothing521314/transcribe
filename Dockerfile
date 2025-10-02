@@ -22,6 +22,7 @@ RUN mkdir -p uploads output cache temp logs static templates && \
     chown -R appuser:appuser /app
 
 COPY web_app.py video_subtitle_processor.py enhanced_translation_manager.py subtitle_enhancer.py ./
+COPY shared_state.py __init__.py ./ 
 COPY templates/ templates/
 COPY routes/ routes/
 COPY static/ static/

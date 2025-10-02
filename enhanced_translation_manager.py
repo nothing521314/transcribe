@@ -181,7 +181,7 @@ class EnhancedTranslationManager:
         if not self.gemini_keys:
             return texts, False
 
-        from web_app import cancel_flags
+        from shared_state import cancel_flags
         
         if self.current_task_id and cancel_flags.get(self.current_task_id):
             logger.info(f"Gemini translation cancelled before starting")
@@ -358,7 +358,7 @@ Return ONLY the translations numbered 1-{len(texts)}."""
             logger.warning("Google Translate not available")
             return texts
 
-        from web_app import cancel_flags
+        from shared_state import cancel_flags
         
         # Language code mapping
         lang_codes = {
@@ -421,7 +421,7 @@ Return ONLY the translations numbered 1-{len(texts)}."""
         if not texts:
             return []
         logger.info(f"Starting translation of {len(texts)} texts to {target_language}")
-        from web_app import cancel_flags  # Import here to avoid circular import at module level
+        from shared_state import cancel_flags  # Import here to avoid circular import at module level
         # Process in batches
         all_translations = []
         total_batches = (len(texts) + self.batch_size - 1) // self.batch_size

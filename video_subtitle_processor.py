@@ -318,7 +318,8 @@ class VideoSubtitleProcessor:
     def improve_subtitle_timing(self, segments: List[Dict], 
                                max_chars_per_line: int = 50, 
                                max_duration: float = 6.0,
-                               min_duration: float = 1.0) -> List[Dict]:
+                               min_duration: float = 1.0,
+                               allow_split: bool = True) -> List[Dict]:
         """Improve subtitle timing and formatting"""
         logger.info(f"⚙️ Optimizing timing for {len(segments)} segments")
         
@@ -342,7 +343,7 @@ class VideoSubtitleProcessor:
             text = self._clean_subtitle_text(text)
             
             # Handle long segments
-            if len(text) > max_chars_per_line or duration > max_duration:
+            if allow_split and len(text) > max_chars_per_line or duration > max_duration:
                 chunks = self._split_text_intelligently(text, max_chars_per_line)
                 
                 if len(chunks) > 1:

@@ -18,11 +18,21 @@ from werkzeug.utils import secure_filename
 import time
 import logging
 import yt_dlp
+import re
 
 # Import enhanced modules
 from video_subtitle_processor import OptimizedVideoSubtitleProcessor
 from enhanced_translation_manager import EnhancedTranslationManager
 from routes.enhance_subtitle import init_enhance_routes
+
+# Ensure current directory is in Python path
+from shared_state import (
+    cancel_flags, 
+    processing_tasks, 
+    task_processors, 
+    task_threads, 
+    translation_managers
+)
 
 # Enhanced logging setup
 logging.basicConfig(
@@ -106,13 +116,6 @@ SUPPORTED_LANGUAGES = {
     "estonian": {"code": "et", "name": "Estonian", "native": "Tiếng Estonia", "flag": "🇪🇪"},
 }
 
-# Global variables cho task tracking
-processing_tasks = {}
-task_processors = {}  # Store processor instances for cancellation
-task_threads = {}     # Store thread references for cancellation
-cancel_flags = {}     # Global cancel flags
-translation_managers = {}  # Cache translation managers
-
 def cleanup_task(task_id, status = 'cancelled'):
     """Clean up resources for cancelled task"""
     try:
@@ -138,7 +141,7 @@ def cleanup_task(task_id, status = 'cancelled'):
     except Exception as e:
         logger.error(f"Error cleaning up task {task_id}: {e}")
 
-init_enhance_routes(app, socketio, processing_tasks, cancel_flags, OUTPUT_FOLDER, cleanup_task)
+init_enhance_routes(app, socketio, OUTPUT_FOLDER, cleanup_task)
 
 def heartbeat(task_id):
     """Optimized heartbeat với flush"""
@@ -346,6 +349,28 @@ class CancellableWhisperModel:
             except Exception as e:
                 logger.error(f"Failed to emit timeline progress: {e}")
 
+def handle_merge_lines(segments: List[Dict]) -> List[Dict]:
+        """Merge consecutive subtitle lines (pairwise: 0+1, 2+3, ...)"""
+        merged = []
+
+        for i in range(0, len(segments), 2):
+            if i + 1 < len(segments):
+                seg1 = segments[i]
+                seg2 = segments[i + 1]
+                merged.append(
+                    {
+                        "start": seg1["start"],
+                        "end": seg2["end"],
+                        "text": f"{seg1['text']} {seg2['text']}".strip(),
+                    }
+                )
+            else:
+                # Last segment (odd count) - keep as-is
+                merged.append(segments[i])
+
+        logger.info(f"Merged {len(segments)} segments into {len(merged)}")
+        return merged
+    
 class EnhancedOptimizedVideoSubtitleProcessor(OptimizedVideoSubtitleProcessor):
     """Enhanced processor with intelligent API management and WebSocket integration"""
 
@@ -674,8 +699,9 @@ def process_video_task_enhanced(
             video_url = processing_tasks[task_id]["video_url"]
             emit_step_progress("download", 0, "Starting video download...")
 
+            output_dir = os.path.join(UPLOAD_FOLDER, 'videos')
             downloaded_path, title = download_youtube_video(
-                video_url, UPLOAD_FOLDER, task_id
+                video_url, output_dir, task_id
             )
             if not downloaded_path:
                 raise RuntimeError(f"Cannot download video: {title}")
@@ -746,12 +772,19 @@ def process_video_task_enhanced(
             max_duration=options.get("max_duration", 6.0),
         )
         
+        # Merge segments
+        if options.get("merge_lines", False):
+            improved_segments = handle_merge_lines(improved_segments)
+            emit_step_progress("merging", 100, f"Merged {improved_segments} segments")
+            socketio.sleep(0)
+
         emit_step_progress("timing", 50, f"Optimized {len(improved_segments)} segments")
         socketio.sleep(0)
         
         # Create original SRT
         base_name = Path(video_path).stem
-        original_srt_path = os.path.join(OUTPUT_FOLDER, f"{base_name}_original.srt")
+        srt_path = os.path.join(OUTPUT_FOLDER, "srt")
+        original_srt_path = os.path.join(srt_path, f"{base_name}_original.srt")
         processor.create_srt_from_segments(improved_segments, original_srt_path)
         
         emit_step_progress("timing", 100, "Original SRT file created")
@@ -802,7 +835,8 @@ def process_video_task_enhanced(
                                     "text": translated_text,
                                 })
 
-                        lang_srt_path = os.path.join(OUTPUT_FOLDER, f"{base_name}_{lang}.srt")
+                        translate_dir = os.path.join(OUTPUT_FOLDER, "translations")
+                        lang_srt_path = os.path.join(translate_dir, f"{base_name}_{lang}.srt")
                         processor.create_srt_from_segments(translated_segments, lang_srt_path)
                         translated_files[lang] = lang_srt_path
 
@@ -834,7 +868,7 @@ def process_video_task_enhanced(
         files_for_download = []
         files_for_download.append({
             "filename": os.path.basename(original_srt_path),
-            "name": "Original (English)",
+            "name": "Bản gốc (English)",
             "flag": "🇺🇸",
         })
 
@@ -916,6 +950,375 @@ def process_video_task_enhanced(
         # Always clean up resources
         cleanup_task(task_id, 'completed')
 
+def parse_srt_to_segments(srt_path: str) -> List[Dict]:
+    """
+    Parse SRT file to segments format compatible with video processor.
+    
+    Args:
+        srt_path: Path to SRT file
+        
+    Returns:
+        List of segment dictionaries with 'start', 'end', 'text' keys
+    """
+    segments = []
+    
+    try:
+        with open(srt_path, 'r', encoding='utf-8') as f:
+            content = f.read().strip()
+        
+        # Split by double newlines to get individual subtitle blocks
+        blocks = re.split(r'\n\s*\n', content)
+        
+        for block in blocks:
+            if not block.strip():
+                continue
+                
+            lines = block.strip().split('\n')
+            
+            # Skip if block doesn't have at least 3 lines (index, timestamp, text)
+            if len(lines) < 3:
+                continue
+            
+            # Line 0: subtitle index (skip)
+            # Line 1: timestamp
+            timestamp_line = lines[1]
+            
+            # Parse timestamp: "00:00:00,000 --> 00:00:01,760"
+            timestamp_match = re.match(
+                r'(\d{2}):(\d{2}):(\d{2}),(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2}),(\d{3})',
+                timestamp_line
+            )
+            
+            if not timestamp_match:
+                logger.warning(f"Invalid timestamp format: {timestamp_line}")
+                continue
+            
+            # Extract start time
+            start_h, start_m, start_s, start_ms = map(int, timestamp_match.groups()[:4])
+            start_time = start_h * 3600 + start_m * 60 + start_s + start_ms / 1000
+            
+            # Extract end time
+            end_h, end_m, end_s, end_ms = map(int, timestamp_match.groups()[4:])
+            end_time = end_h * 3600 + end_m * 60 + end_s + end_ms / 1000
+            
+            # Lines 2+: subtitle text (may span multiple lines)
+            text = '\n'.join(lines[2:]).strip()
+            
+            if text:  # Only add if there's actual text
+                segments.append({
+                    'start': start_time,
+                    'end': end_time,
+                    'text': text
+                })
+        
+        logger.info(f"Parsed {len(segments)} segments from SRT file: {srt_path}")
+        return segments
+        
+    except FileNotFoundError:
+        logger.error(f"SRT file not found: {srt_path}")
+        return []
+    except Exception as e:
+        logger.error(f"Error parsing SRT file {srt_path}: {e}")
+        return []
+
+def process_srt_task_enhanced(
+    task_id, srt_path, target_languages, api_keys, options
+):
+    """Enhanced SRT processing starting from step 3 (timing optimization)"""
+    global processing_tasks, task_processors
+
+    try:
+        logger.info(f"Starting enhanced SRT processing for task {task_id}")
+        start_time = time.time()
+
+        processing_tasks[task_id]["status"] = "processing"
+        processing_tasks[task_id]["start_time"] = datetime.now()
+
+        def emit_step_progress(step_id, step_progress, message, force_emit=False, **kwargs):
+            """Enhanced emit function with better reliability"""
+            check_cancellation(task_id)
+            if cancel_flags.get(task_id):
+                raise InterruptedError("Task cancelled")
+
+            # Adjusted weights for SRT processing (no download/transcription)
+            step_weights = {
+                "initialization": 10,
+                "loading": 15,
+                "timing": 25,
+                "translation": 45,
+                "completion": 5,
+            }
+
+            step_starts = {
+                "initialization": 0,
+                "loading": 10,
+                "timing": 25,
+                "translation": 50,
+                "completion": 95,
+            }
+
+            base_progress = step_starts.get(step_id, 0)
+            step_weight = step_weights.get(step_id, 5)
+            overall_progress = base_progress + (step_progress * step_weight / 100)
+            overall_progress = min(max(overall_progress, 0), 100)
+
+            elapsed_time = time.time() - start_time
+
+            # Estimate remaining time
+            if overall_progress > 5:
+                estimated_total = elapsed_time * 100 / overall_progress
+                remaining_time = max(0, estimated_total - elapsed_time)
+            else:
+                remaining_time = None
+
+            progress_data = {
+                "task_id": task_id,
+                "step": step_id,
+                "step_name": step_id.replace('_', ' ').title(),
+                "step_progress": step_progress,
+                "overall_progress": round(overall_progress, 1),
+                "message": message,
+                "elapsed_time": round(elapsed_time, 1),
+                "remaining_time": round(remaining_time, 1) if remaining_time else None,
+                "status": "processing",
+                **kwargs
+            }
+
+            try:
+                socketio.emit("progress_update", progress_data, room=task_id)
+                socketio.sleep(0)
+                check_cancellation(task_id)
+                processing_tasks[task_id]["message"] = message
+                logger.info(f"[{task_id}] {step_id} {step_progress}% - {message}")
+                
+                if force_emit or step_progress >= 100:
+                    socketio.sleep(0.1)
+                else:
+                    socketio.sleep(0)
+                    
+            except Exception as e:
+                logger.error(f"Failed to emit progress for {task_id}: {e}")
+
+        # Step 1: Initialization
+        if cancel_flags.get(task_id):
+            raise InterruptedError("Task cancelled during initialization")
+
+        emit_step_progress("initialization", 0, "Initializing SRT processor...")
+        socketio.sleep(0)
+        
+        processor = EnhancedOptimizedVideoSubtitleProcessor(
+            model_size=options.get("model_size", "base"), 
+            gemini_api_keys=api_keys,
+            socketio=socketio,
+            task_id=task_id
+        )
+        processor.set_task_id(task_id)
+        task_processors[task_id] = processor
+        
+        emit_step_progress("initialization", 100, "Processor initialized")
+        socketio.sleep(0)
+
+        # Step 2: Load SRT file
+        if cancel_flags.get(task_id):
+            raise InterruptedError("Task cancelled before loading SRT")
+
+        emit_step_progress("download", 0, "Loading SRT file...")
+        socketio.sleep(0)
+
+        # Parse SRT file to segments
+        segments = parse_srt_to_segments(srt_path)
+        if not segments:
+            raise RuntimeError("Failed to parse SRT file or file is empty")
+
+        emit_step_progress("download", 100, f"Loaded {len(segments)} segments from SRT")
+        socketio.sleep(0)
+
+        emit_step_progress("transcription", 100, f"Skipping transcription")
+        socketio.sleep(0)
+
+        # Step 3: Timing optimization
+        if cancel_flags.get(task_id):
+            raise InterruptedError("Task cancelled before timing optimization")
+
+        emit_step_progress("timing", 0, "Starting timing optimization...")
+        socketio.sleep(0)
+        
+        improved_segments = processor.improve_subtitle_timing(
+            segments,
+            max_chars_per_line=options.get("max_chars", 50),
+            max_duration=options.get("max_duration", 6.0),
+        )
+
+        if options.get("merge_lines", False):
+            improved_segments = handle_merge_lines(improved_segments)
+            emit_step_progress("merging", 100, f"Merged {len(improved_segments)} segments")
+            socketio.sleep(0)
+
+        emit_step_progress("timing", 50, f"Optimized {len(improved_segments)} segments")
+        socketio.sleep(0)
+        
+        # Create optimized original SRT
+        base_name = Path(srt_path).stem
+        srt_output_dir = os.path.join(OUTPUT_FOLDER, "srt")
+        os.makedirs(srt_output_dir, exist_ok=True)
+        original_srt_path = os.path.join(srt_output_dir, f"{base_name}_optimized.srt")
+        processor.create_srt_from_segments(improved_segments, original_srt_path)
+        
+        emit_step_progress("timing", 100, "Optimized SRT file created")
+        socketio.sleep(0)
+
+        # Step 4: Enhanced Translation
+        translated_files = {}
+        if target_languages and api_keys:
+            if cancel_flags.get(task_id):
+                raise InterruptedError("Task cancelled before translation")
+
+            emit_step_progress(
+                "translation", 0, f"Starting translation to {len(target_languages)} languages..."
+            )
+            socketio.sleep(0)
+
+            texts = [s["text"] for s in improved_segments]
+            try:
+                translated_texts_dict = processor.enhanced_parallel_translate(
+                    texts, target_languages, task_id
+                )
+                
+                total_langs = len(translated_texts_dict)
+                processed_langs = 0
+
+                # Create translated SRT files
+                translate_dir = os.path.join(OUTPUT_FOLDER, "translations")
+                os.makedirs(translate_dir, exist_ok=True)
+                
+                for lang, translated_texts in translated_texts_dict.items():
+                    if cancel_flags.get(task_id):
+                        raise InterruptedError("Task cancelled during file creation")
+
+                    processed_langs += 1
+                    file_progress = 85 + (processed_langs * 15 // total_langs)
+                    emit_step_progress(
+                        "translation", file_progress, f"Creating {lang} subtitle file..."
+                    )
+                    socketio.sleep(0)
+
+                    if translated_texts and len(translated_texts) == len(improved_segments):
+                        translated_segments = []
+                        for segment, translated_text in zip(improved_segments, translated_texts):
+                            if translated_text.strip():
+                                translated_segments.append({
+                                    "start": segment["start"],
+                                    "end": segment["end"],
+                                    "text": translated_text,
+                                })
+
+                        lang_srt_path = os.path.join(translate_dir, f"{base_name}_{lang}.srt")
+                        processor.create_srt_from_segments(translated_segments, lang_srt_path)
+                        translated_files[lang] = lang_srt_path
+
+                emit_step_progress("translation", 100, "All translations completed")
+                socketio.sleep(0)
+
+            except InterruptedError:
+                logger.info(f"Translation cancelled for task {task_id}")
+                raise
+            except Exception as translation_error:
+                logger.error(f"Translation error: {translation_error}")
+                emit_step_progress("translation", 100, f"Translation completed with errors: {str(translation_error)}")
+                socketio.sleep(0.5)
+        else:
+            emit_step_progress("translation", 100, "Translation skipped - no API keys provided")
+            socketio.sleep(0)
+
+        # Step 5: Completion
+        if cancel_flags.get(task_id):
+            raise InterruptedError("Task cancelled before completion")
+
+        logger.info("Starting completion phase...")
+        socketio.sleep(0.2)
+        emit_step_progress("completion", 0, "Finalizing results...")
+        socketio.sleep(0)
+
+        # Prepare results for frontend
+        files_for_download = []
+        files_for_download.append({
+            "filename": os.path.basename(original_srt_path),
+            "name": "Bản gốc (Optimized)",
+            "flag": "✨",
+        })
+
+        for lang, file_path in translated_files.items():
+            lang_info = SUPPORTED_LANGUAGES.get(lang, {})
+            files_for_download.append({
+                "filename": os.path.basename(file_path),
+                "name": lang_info.get("native", lang.capitalize()),
+                "flag": lang_info.get("flag", "🌍"),
+            })
+            
+        emit_step_progress("completion", 60, f"Prepared {len(files_for_download)} files for download")
+        socketio.sleep(0)
+
+        processing_tasks[task_id]["status"] = "completed"
+        processing_tasks[task_id]["results"] = {
+            "original_srt": original_srt_path,
+            "translated_files": translated_files,
+            "segments_count": len(improved_segments),
+            "files": files_for_download,
+            "total_time": time.time() - start_time,
+            "api_status": processor.get_api_status()
+        }
+
+        emit_step_progress("completion", 90, "Saving task results...")
+        socketio.sleep(0)
+
+        # Final completion
+        total_time = time.time() - start_time
+        emit_step_progress("completion", 100, f"All tasks completed in {total_time:.1f}s!")
+        socketio.sleep(0.5)
+
+        completion_data = {
+            "task_id": task_id,
+            "results": {
+                "segments_count": len(improved_segments),
+                "files": files_for_download,
+                "total_time": total_time,
+                "api_status": processor.get_api_status()
+            },
+        }
+
+        socketio.emit("task_completed", completion_data, room=task_id)
+        socketio.sleep(0.5)
+        logger.info(f"SRT task {task_id} completed successfully")
+
+    except InterruptedError as e:
+        logger.info(f"Task {task_id} was cancelled: {e}")
+        cleanup_task(task_id)
+        
+        try:
+            socketio.emit("task_cancelled", {
+                "task_id": task_id,
+                "message": "Task was cancelled by user",
+                "status": "cancelled"
+            }, room=task_id)
+            socketio.sleep(0.1)
+        except:
+            pass
+            
+    except Exception as e:
+        logger.error(f"SRT processing error for task {task_id}: {e}")
+        processing_tasks[task_id]["status"] = "error"
+
+        error_data = {
+            "task_id": task_id,
+            "step": "error",
+            "overall_progress": 0,
+            "message": f"Error: {str(e)}",
+            "status": "error",
+        }
+
+        socketio.emit("progress_update", error_data, room=task_id)
+    finally:
+        cleanup_task(task_id, 'completed')
 
 # Enhanced WebSocket event handlers
 @socketio.on("connect")
@@ -1046,29 +1449,53 @@ def upload_file():
             "max_chars": int(request.form.get("max_chars", 50)),
             "max_duration": float(request.form.get("max_duration", 6.0)),
             "model_size": request.form.get("model_size", "base"),
+            "merge_lines": request.form.get("merge_lines", "false").lower() == "true",
         }
 
         video_path = None
+        srt_path = None
         original_filename = None
         video_url = None
-
-        # Handle file upload or URL
+        file_type = None
+        
         if "file" in request.files and request.files["file"].filename:
             file = request.files["file"]
-            if file and allowed_file(file.filename):
+            
+            if file:
                 filename = secure_filename(file.filename)
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"{timestamp}_{filename}"
-                video_path = os.path.join(UPLOAD_FOLDER, filename)
-                file.save(video_path)
-                original_filename = file.filename
-                logger.info(f"File uploaded: {video_path}")
+                file_ext = filename.rsplit(".", 1)[1].lower() if "." in filename else ""
+                
+                # Check if it's an SRT file
+                if file_ext == "srt":
+                    output_dir = os.path.join(UPLOAD_FOLDER, "srt")
+                    os.makedirs(output_dir, exist_ok=True)
+                    srt_path = os.path.join(output_dir, filename)
+                    file.save(srt_path)
+                    original_filename = file.filename
+                    file_type = "srt"
+                    logger.info(f"SRT file uploaded: {srt_path}")
+                    
+                # Check if it's a video file
+                elif allowed_file(filename, "video"):
+                    output_dir = os.path.join(UPLOAD_FOLDER, "videos")
+                    os.makedirs(output_dir, exist_ok=True)
+                    video_path = os.path.join(output_dir, filename)
+                    file.save(video_path)
+                    original_filename = file.filename
+                    file_type = "video"
+                    logger.info(f"Video file uploaded: {video_path}")
+                else:
+                    return jsonify({
+                        "success": False,
+                        "message": "Invalid file type. Please upload a video or SRT file",
+                    })
 
         elif request.form.get("video_url"):
             video_url = request.form.get("video_url")
+            file_type = "url"
             logger.info(f"Received URL for enhanced processing: {video_url}")
 
-        if not video_path and not video_url:
+        if not video_path and not video_url and not srt_path:
             return jsonify({
                 "success": False,
                 "message": "Please select a video file or provide a URL",
@@ -1079,6 +1506,8 @@ def upload_file():
             "status": "queued",
             "start_time": datetime.now(),
             "video_path": video_path,
+            "srt_path": srt_path,
+            "file_type": file_type,
             "original_filename": original_filename,
             "video_url": video_url,
             "target_languages": target_languages,
@@ -1091,10 +1520,19 @@ def upload_file():
 
         # Start enhanced processing
         socketio.start_background_task(heartbeat, task_id)
-        processing_thread = socketio.start_background_task(
-            process_video_task_enhanced,
-            task_id, video_path, target_languages, api_keys, options
-        )
+        
+        if file_type == "srt":
+            # Process SRT directly (skip transcription)
+            processing_thread = socketio.start_background_task(
+                process_srt_task_enhanced,
+                task_id, srt_path, target_languages, api_keys, options
+            )
+        else:
+            # Process video normally
+            processing_thread = socketio.start_background_task(
+                process_video_task_enhanced,
+                task_id, video_path, target_languages, api_keys, options
+            )
         
         # Store thread reference
         task_threads[task_id] = processing_thread
@@ -1103,7 +1541,8 @@ def upload_file():
 
         return jsonify({
             "success": True, 
-            "task_id": task_id, 
+            "task_id": task_id,
+            "file_type": file_type,
             "message": "Enhanced processing started with intelligent API management"
         })
 

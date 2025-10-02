@@ -117,30 +117,41 @@
 	<div x-data="subtitleApp()" x-init="init()" x-cloak class="container mx-auto px-4 py-8">
 		<!-- Header -->
 		<header class="text-center mb-12">
-			<h1 class="text-5xl font-bold mb-4">🎬 AI Subtitle Generator</h1>
+			<h1 class="text-5xl font-bold mb-4">🎬 Trình tạo phụ đề AI</h1>
 			<p class="text-xl opacity-90">
-				Enhanced with WebSocket & Multi-API support
+				Được nâng cấp với WebSocket & hỗ trợ nhiều API
 			</p>
 			<div class="mt-4">
-				<span class="text-sm">Status: </span>
-				<span :class="connectionStatus === 'connected' ? 'text-green-400' : 'text-red-400'" x-text="connectionStatus"
-					class="font-semibold"></span>
+				<span class="text-sm">Trạng thái: </span>
+				<span :class="connectionStatus === 'connected' ? 'text-green-400' : 'text-red-400'"
+					x-text="connectionStatus" class="font-semibold"></span>
 			</div>
 		</header>
-		<div class="mb-2 flex justify-end space-x-4">
-			<a href="/enhance_subtitle" class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
-				<i class="fas fa-level-up mr-2"></i>Enhance English Subtitle
-			</a>
-			<a href="/youtube_downloader" class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
-				<i class="fas fa-download mr-2"></i>Youtube Downloader
-			</a>
-			<a href="/history" class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
-				<i class="fas fa-history mr-2"></i>History
-			</a>
-			<button @click="clearCache()"
-				class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
-				<i class="fas fa-trash mr-2"></i>Clear Cache
-			</button>
+		<div class="flex mb-2 justify-between">
+			<div>
+				<button x-show="!processing && currentStep.status === 'pending'" @click="processing = true"
+					class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
+					</i>Đang xử lý...
+				</button>
+			</div>
+			<div class="flex justify-end space-x-4">
+				<a href="/enhance_subtitle"
+					class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
+					<i class="fas fa-level-up mr-2"></i>Cải thiện phụ đề
+				</a>
+				<a href="/youtube_downloader"
+					class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
+					<i class="fas fa-download mr-2"></i>Tải video Youtube
+				</a>
+				<a href="/history"
+					class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
+					<i class="fas fa-history mr-2"></i>Lịch sử
+				</a>
+				<button @click="clearCache()"
+					class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
+					<i class="fas fa-trash mr-2"></i>Xóa bộ nhớ đệm
+				</button>
+			</div>
 		</div>
 
 		<!-- API Keys Section -->
@@ -159,15 +170,15 @@
 				<div class="space-y-2">
 					<button @click="addApiKeys()" :disabled="!newApiKey.trim()"
 						class="w-full px-4 py-2 bg-yellow-500/20 border border-yellow-400/30 rounded-lg hover:bg-yellow-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-						<i class="fas fa-plus mr-2"></i>Add Keys
+						<i class="fas fa-plus mr-2"></i>Thêm Keys
 					</button>
 					<button @click="validateKeys()" :disabled="apiKeys.length === 0"
 						class="w-full px-4 py-2 bg-green-500/20 border border-green-400/30 rounded-lg hover:bg-green-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-						<i class="fas fa-check mr-2"></i>Validate
+						<i class="fas fa-check mr-2"></i>Kiểm tra
 					</button>
 					<button @click="clearApiKeys()" :disabled="apiKeys.length === 0"
 						class="w-full px-4 py-2 bg-red-500/20 border border-red-400/30 rounded-lg hover:bg-red-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-						<i class="fas fa-trash mr-2"></i>Clear
+						<i class="fas fa-trash mr-2"></i>Xóa
 					</button>
 				</div>
 			</div>
@@ -176,13 +187,13 @@
 			<div x-show="apiKeys.length > 0" class="mt-4">
 				<div class="flex justify-between items-center mb-3">
 					<h3 class="font-medium">
-						Active API Keys (<span x-text="apiKeys.length"></span>)
+						Khóa API đang hoạt động (<span x-text="apiKeys.length"></span>)
 					</h3>
 					<div class="text-sm opacity-75">
 						<span class="text-green-400" x-text="validatedKeys.valid || 0"></span>
-						valid •
+						Hợp lệ •
 						<span class="text-red-400" x-text="validatedKeys.invalid || 0"></span>
-						invalid
+						Không hợp lệ
 					</div>
 				</div>
 
@@ -190,7 +201,8 @@
 					<template x-for="(key, index) in apiKeys" :key="index">
 						<div class="flex items-center justify-between p-2 bg-white/5 rounded-lg">
 							<div class="flex items-center space-x-2">
-								<span class="w-6 h-6 bg-yellow-500/20 rounded-full flex items-center justify-center text-xs"
+								<span
+									class="w-6 h-6 bg-yellow-500/20 rounded-full flex items-center justify-center text-xs"
 									x-text="index + 1"></span>
 								<span class="font-mono text-sm" x-text="`...${key.slice(-12)}`"></span>
 								<div x-show="validationResults[key]"
@@ -214,20 +226,20 @@
 				<!-- File Upload -->
 				<div>
 					<h3 class="text-xl font-bold mb-4">
-						<i class="fas fa-upload text-blue-400 mr-2"></i>Upload Video
+						<i class="fas fa-upload text-blue-400 mr-2"></i>Tải lên video/ Subtitle
 					</h3>
-					<div
-						class="border-2 border-dashed border-white/30 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400/50 transition-colors"
-						@click="$refs.fileInput.click()" @drop.prevent="handleFileDrop($event)" @dragover.prevent="dragOver = true"
-						@dragleave.prevent="dragOver = false" :class="{'border-blue-400/70 bg-blue-400/10': dragOver}">
-						<input type="file" x-ref="fileInput" @change="handleFileSelect($event)" accept="video/*,audio/*"
-							class="hidden" />
+					<div class="border-2 border-dashed border-white/30 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400/50 transition-colors"
+						@click="$refs.fileInput.click()" @drop.prevent="handleFileDrop($event)"
+						@dragover.prevent="dragOver = true" @dragleave.prevent="dragOver = false"
+						:class="{'border-blue-400/70 bg-blue-400/10': dragOver}">
+						<input type="file" x-ref="fileInput" @change="handleFileSelect($event)"
+							accept="video/*,audio/*,.srt" class="hidden" />
 
 						<div x-show="!selectedFile">
 							<i class="fas fa-cloud-upload-alt text-4xl text-white/50 mb-4"></i>
-							<p class="font-medium">Drop video here or click to browse</p>
+							<p class="font-medium">Kéo thả video vào đây hoặc nhấp để chọn</p>
 							<p class="text-sm text-white/60 mt-2">
-								MP4, AVI, MOV, MKV, MP3, WAV supported
+								Hỗ trợ MP4, AVI, MOV, MKV, MP3, WAV, SRT
 							</p>
 						</div>
 
@@ -236,7 +248,7 @@
 							<p class="font-medium" x-text="selectedFile?.name"></p>
 							<p class="text-sm text-white/60" x-text="formatFileSize(selectedFile?.size)"></p>
 							<button @click.stop="selectedFile = null" class="mt-2 text-red-400 hover:text-red-300">
-								<i class="fas fa-times mr-1"></i>Remove
+								<i class="fas fa-times mr-1"></i>Xóa
 							</button>
 						</div>
 					</div>
@@ -248,13 +260,14 @@
 						<i class="fas fa-link text-purple-400 mr-2"></i>Video URL
 					</h3>
 					<div class="space-y-4">
-						<input :disabled="!!selectedFile?.name" type="url" x-model="videoUrl" placeholder="https://youtube.com/watch?v=..."
+						<input :disabled="!!selectedFile?.name" type="url" x-model="videoUrl"
+							placeholder="https://youtube.com/watch?v=..."
 							class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:border-purple-400 focus:outline-none" />
 
 						<div class="bg-blue-500/20 border border-blue-400/30 rounded-lg p-3">
 							<p class="text-sm text-blue-200">
 								<i class="fas fa-info-circle mr-2"></i>
-								Supports YouTube, Vimeo, and other platforms
+								Hỗ trợ YouTube, Vimeo và các nền tảng khác
 							</p>
 						</div>
 					</div>
@@ -264,28 +277,35 @@
 
 		<!-- Language Selection -->
 		<div class="glass-effect rounded-xl p-6 mb-8">
-			<h3 class="text-xl font-bold mb-4">
-				<i class="fas fa-language text-green-400 mr-2"></i>Target Languages
-			</h3>
+			<div class="flex justify-between items-center mb-4">
+				<h3 class="text-xl font-bold">
+					<i class="fas fa-language text-green-400 mr-2"></i>Ngôn ngữ đích
+				</h3>
+				<label class="flex items-center space-x-3 cursor-pointer">
+					<input type="checkbox" x-model="options.mergeLines" class="w-5 h-5 rounded" />
+					<span>Gộp mỗi 2 dòng</span>
+				</label>
+			</div>
 
 			<div class="flex flex-wrap gap-2 mb-4">
 				<button @click="selectAll()"
 					class="px-3 py-1 bg-green-500/20 border border-green-400/30 rounded-lg text-sm hover:bg-green-500/30 transition-colors">
-					Select All
+					Chọn tất cả
 				</button>
 				<button @click="selectNone()"
 					class="px-3 py-1 bg-red-500/20 border border-red-400/30 rounded-lg text-sm hover:bg-red-500/30 transition-colors">
-					Clear
+					Xóa chọn
 				</button>
 				<button @click="selectPopular()"
 					class="px-3 py-1 bg-yellow-500/20 border border-yellow-400/30 rounded-lg text-sm hover:bg-yellow-500/30 transition-colors">
-					Popular
+					Phổ biến
 				</button>
 			</div>
 
 			<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-64 overflow-y-auto custom-scrollbar">
 				<template x-for="[key, lang] in Object.entries(languages)" :key="key">
-					<label class="flex items-center p-2 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors"
+					<label
+						class="flex items-center p-2 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors"
 						:class="{'bg-green-500/20 border border-green-400/50': selectedLanguages.includes(key)}">
 						<input type="checkbox" :value="key" x-model="selectedLanguages" class="sr-only" />
 						<div class="flex items-center space-x-2 w-full">
@@ -303,9 +323,9 @@
 			</div>
 
 			<div class="mt-3 text-sm text-white/70">
-				Selected:
+				Đã chọn:
 				<span x-text="selectedLanguages.length" class="font-medium text-green-400"></span>
-				languages
+				ngôn ngữ
 			</div>
 		</div>
 
@@ -313,7 +333,7 @@
 		<div class="glass-effect rounded-xl p-6 mb-8" x-data="{ showAdvanced: false }">
 			<div class="flex justify-between items-center mb-4 cursor-pointer" @click="showAdvanced = !showAdvanced">
 				<h3 class="text-xl font-bold">
-					<i class="fas fa-cog text-purple-400 mr-2"></i>Advanced Options
+					<i class="fas fa-cog text-purple-400 mr-2"></i>Tùy chọn nâng cao
 				</h3>
 				<button class="text-purple-400 hover:text-purple-300">
 					<i :class="showAdvanced ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
@@ -336,12 +356,12 @@
 						</select>
 					</div>
 					<div>
-						<label class="block text-sm font-medium mb-2">Max Characters</label>
+						<label class="block text-sm font-medium mb-2">Ký tự tối đa</label>
 						<input type="number" x-model="options.maxChars" min="20" max="100"
 							class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:border-purple-400 focus:outline-none" />
 					</div>
 					<div>
-						<label class="block text-sm font-medium mb-2">Max Duration (seconds)</label>
+						<label class="block text-sm font-medium mb-2">Thời lượng tối đa (giây)</label>
 						<input type="number" x-model="options.maxDuration" min="1" max="10" step="0.5"
 							class="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:border-purple-400 focus:outline-none" />
 					</div>
@@ -355,10 +375,10 @@
 				:disabled="processing || (!selectedFile && !videoUrl) || selectedLanguages.length === 0 || apiKeys.length === 0"
 				class="btn-primary px-8 py-4 rounded-xl font-bold text-lg shadow-lg">
 				<template x-if="!processing">
-					<span><i class="fas fa-magic mr-2"></i>Generate Subtitles</span>
+					<span><i class="fas fa-magic mr-2"></i>Bắt đầu</span>
 				</template>
 				<template x-if="processing">
-					<span><i class="fas fa-spinner fa-spin mr-2"></i>Processing...</span>
+					<span><i class="fas fa-spinner fa-spin mr-2"></i>Đang xử lý...</span>
 				</template>
 			</button>
 
@@ -366,21 +386,21 @@
 			<div class="mt-4 text-sm">
 				<div x-show="!apiKeys.length" class="text-red-400">
 					<i class="fas fa-exclamation-triangle mr-1"></i>
-					Please add at least one API key
+					Vui lòng thêm ít nhất một API key
 				</div>
 				<div x-show="apiKeys.length && (!selectedFile && !videoUrl)" class="text-yellow-400">
 					<i class="fas fa-upload mr-1"></i>
-					Please upload a video or provide URL
+					Vui lòng tải video hoặc nhập URL
 				</div>
 				<div x-show="apiKeys.length && (selectedFile || videoUrl) && selectedLanguages.length === 0"
 					class="text-yellow-400">
 					<i class="fas fa-language mr-1"></i>
-					Please select target languages
+					Vui lòng chọn ngôn ngữ đích
 				</div>
 				<div x-show="apiKeys.length && (selectedFile || videoUrl) && selectedLanguages.length > 0"
 					class="text-green-400">
 					<i class="fas fa-check-circle mr-1"></i>
-					Ready to process
+					Sẵn sàng xử lý
 				</div>
 			</div>
 		</div>
@@ -388,49 +408,54 @@
 		<!-- Processing Modal (simplified for testing) -->
 		<!-- Enhanced Progress Modal with Timer and Step Details -->
 		<div x-show="processing" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-			<div class="glass-effect rounded-xl p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
+			<div
+				class="glass-effect rounded-xl p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
 				<!-- Header with Timer -->
 				<div class="text-center mb-6">
 					<div
 						class="w-20 h-20 mx-auto mb-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center relative">
-						<i class="fas fa-cogs text-3xl text-white" :class="{'fa-spin': currentStep.status === 'processing'}"></i>
+						<i class="fas fa-cogs text-3xl text-white"
+							:class="{'fa-spin': currentStep.status === 'processing'}"></i>
 
 						<!-- Progress Ring -->
 						<svg class="absolute inset-0 w-20 h-20 transform -rotate-90" viewBox="0 0 36 36">
 							<path class="text-gray-300" stroke="currentColor" stroke-width="2" fill="none"
 								d="M18,2.0845 a 15.9155,15.9155 0 0,1 0,31.831 a 15.9155,15.9155 0 0,1 0,-31.831" />
-							<path class="text-blue-400" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"
-								:stroke-dasharray="`${currentStep.overall_progress}, 100`"
+							<path class="text-blue-400" stroke="currentColor" stroke-width="2" fill="none"
+								stroke-linecap="round" :stroke-dasharray="`${currentStep.overall_progress}, 100`"
 								d="M18,2.0845 a 15.9155,15.9155 0 0,1 0,31.831 a 15.9155,15.9155 0 0,1 0,-31.831" />
 						</svg>
 					</div>
 
-					<h3 class="text-3xl font-bold mb-2">Processing Your Video</h3>
+					<h3 class="text-3xl font-bold mb-2">Đang xử lý video của bạn</h3>
 
 					<!-- Current Step Info -->
 					<div class="bg-white/10 rounded-lg p-4 mb-4">
 						<div class="flex justify-between items-center mb-2">
-							<h4 class="text-lg font-semibold text-blue-300" x-text="currentStep.step_name || 'Processing'"></h4>
+							<h4 class="text-lg font-semibold text-blue-300"
+								x-text="currentStep.step_name || 'Processing'"></h4>
 							<span class="text-sm bg-blue-500/20 px-3 py-1 rounded-full"
 								x-text="`${currentStep.step_progress || 0}%`"></span>
 						</div>
-						<p class="text-white/80 text-sm" x-text="currentStep.message || 'Initializing...'"></p>
+						<p class="text-white/80 text-sm" x-text="currentStep.message || 'Đang khởi tạo...'"></p>
 					</div>
 
 					<!-- Timer Section -->
 					<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 text-center">
 						<div class="bg-white/5 rounded-lg p-3">
-							<div class="text-sm text-white/60">Elapsed Time</div>
+							<div class="text-sm text-white/60">Thời gian đã trôi qua</div>
 							<div class="text-xl font-bold text-green-400" x-text="formatTime(elapsedTime)"></div>
 						</div>
 						<div class="bg-white/5 rounded-lg p-3">
-							<div class="text-sm text-white/60">Overall Progress</div>
-							<div class="text-xl font-bold text-blue-400" x-text="`${Math.round(currentStep.overall_progress || 0)}%`">
+							<div class="text-sm text-white/60">Tiến độ tổng thể</div>
+							<div class="text-xl font-bold text-blue-400"
+								x-text="`${Math.round(currentStep.overall_progress || 0)}%`">
 							</div>
 						</div>
 						<div class="bg-white/5 rounded-lg p-3" x-show="currentStep.remaining_time">
-							<div class="text-sm text-white/60">Est. Remaining</div>
-							<div class="text-xl font-bold text-orange-400" x-text="formatTime(currentStep.remaining_time)"></div>
+							<div class="text-sm text-white/60">Ước tính còn lại</div>
+							<div class="text-xl font-bold text-orange-400"
+								x-text="formatTime(currentStep.remaining_time)"></div>
 						</div>
 					</div>
 				</div>
@@ -438,15 +463,15 @@
 				<!-- Enhanced Progress Bar -->
 				<div class="mb-6">
 					<div class="flex justify-between text-sm mb-2">
-						<span class="font-medium">Overall Progress</span>
+						<span class="font-medium">Tiến độ tổng thể</span>
 						<span x-text="`${Math.round(currentStep.overall_progress || 0)}%`" class="font-bold"></span>
 					</div>
 					<div class="w-full bg-white/20 rounded-full h-6 relative overflow-hidden">
-						<div
-							class="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 rounded-full transition-all duration-1000 ease-out relative"
+						<div class="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 rounded-full transition-all duration-1000 ease-out relative"
 							:style="`width: ${currentStep.overall_progress || 0}%`">
 							<!-- Animated shimmer effect -->
-							<div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-pulse">
+							<div
+								class="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-pulse">
 							</div>
 						</div>
 						<!-- Progress text overlay -->
@@ -457,12 +482,13 @@
 
 				<!-- Enhanced Processing Steps -->
 				<div class="mb-6">
-					<h4 class="font-medium mb-4 text-center">Processing Pipeline</h4>
+					<h4 class="font-medium mb-4 text-center">Quy trình xử lý</h4>
 					<div class="grid grid-cols-2 md:grid-cols-3 gap-3">
 						<template x-for="(step, index) in processingSteps" :key="step.id">
 							<div class="relative">
 								<!-- Step Container -->
-								<div class="flex flex-col items-center p-4 rounded-lg transition-all duration-500" :class="{
+								<div class="flex flex-col items-center p-4 rounded-lg transition-all duration-500"
+									:class="{
                                         'bg-green-500/20 border-2 border-green-500/50 transform scale-105': step.status === 'completed',
                                         'bg-blue-500/20 border-2 border-blue-500/50 animate-pulse': step.status === 'processing',
                                         'bg-red-500/20 border-2 border-red-500/50': step.status === 'error',
@@ -473,18 +499,19 @@
 									<!-- Step Icon with Progress Ring -->
 									<div class="relative w-16 h-16 mb-3">
 										<!-- Progress ring for current step -->
-										<svg x-show="step.status === 'processing'" class="absolute inset-0 w-16 h-16 transform -rotate-90"
-											viewBox="0 0 36 36">
-											<path class="text-gray-300" stroke="currentColor" stroke-width="2" fill="none"
+										<svg x-show="step.status === 'processing'"
+											class="absolute inset-0 w-16 h-16 transform -rotate-90" viewBox="0 0 36 36">
+											<path class="text-gray-300" stroke="currentColor" stroke-width="2"
+												fill="none"
 												d="M18,2.0845 a 15.9155,15.9155 0 0,1 0,31.831 a 15.9155,15.9155 0 0,1 0,-31.831" />
-											<path class="text-blue-400" stroke="currentColor" stroke-width="2" fill="none"
-												stroke-linecap="round" :stroke-dasharray="`${step.progress || 0}, 100`"
+											<path class="text-blue-400" stroke="currentColor" stroke-width="2"
+												fill="none" stroke-linecap="round"
+												:stroke-dasharray="`${step.progress || 0}, 100`"
 												d="M18,2.0845 a 15.9155,15.9155 0 0,1 0,31.831 a 15.9155,15.9155 0 0,1 0,-31.831" />
 										</svg>
 
 										<!-- Icon container -->
-										<div
-											class="w-16 h-16 rounded-full border-2 flex items-center justify-center transition-all duration-500"
+										<div class="w-16 h-16 rounded-full border-2 flex items-center justify-center transition-all duration-500"
 											:class="{
                                                 'bg-green-500 border-green-500 text-white': step.status === 'completed',
                                                 'bg-blue-500 border-blue-500 text-white': step.status === 'processing',
@@ -519,8 +546,8 @@
 									<span class="text-sm font-medium text-center mb-1" x-text="step.name"></span>
 
 									<!-- Step Progress -->
-									<div x-show="step.status === 'processing' && step.progress > 0" class="text-xs text-white/70"
-										x-text="`${step.progress}%`"></div>
+									<div x-show="step.status === 'processing' && step.progress > 0"
+										class="text-xs text-white/70" x-text="`${step.progress}%`"></div>
 
 									<!-- Step Number -->
 									<span class="text-xs opacity-75 mt-1" x-text="`${index + 1}`"></span>
@@ -542,10 +569,11 @@
 					<div class="flex items-center justify-between mb-3">
 						<h5 class="font-medium text-blue-300 flex items-center">
 							<i class="fas fa-info-circle mr-2"></i>
-							Current Step Details
+							Chi tiết bước hiện tại
 						</h5>
 						<div class="flex items-center space-x-2">
-							<span class="text-xs bg-blue-500/20 px-2 py-1 rounded-full" x-text="currentStep.step || 'N/A'"></span>
+							<span class="text-xs bg-blue-500/20 px-2 py-1 rounded-full"
+								x-text="currentStep.step || 'N/A'"></span>
 							<span class="text-xs bg-green-500/20 px-2 py-1 rounded-full"
 								x-text="`${currentStep.step_progress || 0}%`"></span>
 						</div>
@@ -559,7 +587,8 @@
 								:style="`width: ${currentStep.step_progress || 0}%`"></div>
 						</div>
 						<div x-show="progressTranslations.length > 0" class="mt-2">
-							<template x-for="progressTranslation in progressTranslations" :key="progressTranslation.target_language">
+							<template x-for="progressTranslation in progressTranslations"
+								:key="progressTranslation.target_language">
 								<div class="mb-2">
 									<p x-text="progressTranslation.message"></p>
 									<div class="w-full bg-white/20 rounded-full h-2 mt-1">
@@ -577,23 +606,24 @@
 					<div class="flex justify-between items-center mb-3">
 						<h4 class="font-medium flex items-center">
 							<i class="fas fa-terminal mr-2 text-green-400"></i>
-							Real-time Logs
+							Nhật ký thời gian thực
 							<span x-show="logs.length > 0" class="ml-2 text-xs bg-green-500/20 px-2 py-1 rounded-full"
 								x-text="logs.length"></span>
 						</h4>
 						<div class="flex space-x-2">
 							<button @click="logs = []"
 								class="text-white/50 hover:text-white/70 text-sm px-3 py-1 rounded border border-white/20 hover:border-white/40 transition-colors">
-								<i class="fas fa-trash mr-1"></i>Clear
+								<i class="fas fa-trash mr-1"></i>Xóa
 							</button>
 							<button @click="downloadLogs()"
 								class="text-white/50 hover:text-white/70 text-sm px-3 py-1 rounded border border-white/20 hover:border-white/40 transition-colors">
-								<i class="fas fa-download mr-1"></i>Export
+								<i class="fas fa-download mr-1"></i>Xuất
 							</button>
 						</div>
 					</div>
 
-					<div class="logs-container h-40 overflow-y-auto text-sm space-y-1 bg-black/30 rounded p-3 custom-scrollbar">
+					<div
+						class="logs-container h-40 overflow-y-auto text-sm space-y-1 bg-black/30 rounded p-3 custom-scrollbar">
 						<template x-for="log in logs.slice(-50)" :key="log.id">
 							<div class="flex space-x-3 py-1 font-mono text-xs" :class="{
                                     'text-green-300': log.level === 'success' || log.level === 'info',
@@ -625,9 +655,10 @@
 						</template>
 
 						<!-- Empty State -->
-						<div x-show="logs.length === 0" class="text-white/50 text-center py-8 flex flex-col items-center">
+						<div x-show="logs.length === 0"
+							class="text-white/50 text-center py-8 flex flex-col items-center">
 							<i class="fas fa-hourglass-half text-2xl mb-2 opacity-50"></i>
-							<p>Waiting for logs...</p>
+							<p>Đang chờ nhật ký...</p>
 						</div>
 					</div>
 				</div>
@@ -636,27 +667,27 @@
 				<div x-show="currentStep.overall_progress < 100" class="flex justify-center space-x-4">
 					<button x-show="currentStep.status !== 'cancelled'" @click="cancelProcessing()"
 						class="px-6 py-3 bg-red-500/20 border border-red-400/30 rounded-lg text-red-400 hover:bg-red-500/30 transition-colors flex items-center">
-						<i class="fas fa-stop mr-2"></i>Cancel Processing
+						<i class="fas fa-stop mr-2"></i>Hủy
 					</button>
 					<button x-show="currentStep.status === 'cancelled'" @click="submitForm()"
 						class="px-6 py-3 bg-green-500/20 border border-green-400/30 rounded-lg text-green-400 hover:bg-green-500/30 transition-colors flex items-center">
-						<i class="fas fa-refresh mr-2"></i>Restart task
+						<i class="fas fa-refresh mr-2"></i>Khởi động lại
 					</button>
 
 					<!-- Minimize Button -->
 					<button @click="processing = false"
 						class="px-6 py-3 bg-gray-500/20 border border-gray-400/30 rounded-lg text-gray-400 hover:bg-gray-500/30 transition-colors flex items-center">
-						<i class="fas fa-minus mr-2"></i>Minimize
+						<i class="fas fa-minus mr-2"></i>Thu nhỏ
 					</button>
 				</div>
 
 				<!-- Processing Statistics -->
 				<div class="text-center mt-4 text-xs text-white/50 space-y-1">
 					<div x-show="currentTaskId">
-						Task ID: <span class="font-mono" x-text="currentTaskId"></span>
+						ID tác vụ: <span class="font-mono" x-text="currentTaskId"></span>
 					</div>
 					<div>
-						Started:
+						Bắt đầu lúc:
 						<span x-text="new Date(processingStartTime).toLocaleTimeString()"></span>
 					</div>
 				</div>
@@ -670,7 +701,7 @@
 					<div class="w-16 h-16 mx-auto mb-4 bg-green-500 rounded-full flex items-center justify-center">
 						<i class="fas fa-check text-2xl text-white"></i>
 					</div>
-					<h3 class="text-2xl font-bold mb-2">Subtitles Generated!</h3>
+					<h3 class="text-2xl font-bold mb-2">Phụ đề đã được tạo!</h3>
 					<p class="text-white/70" x-text="`Generated ${results?.segments_count || 0} subtitle segments`"></p>
 				</div>
 
@@ -683,7 +714,7 @@
 							</div>
 							<a :href="`/download/${file.filename}`"
 								class="px-3 py-1 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30">
-								<i class="fas fa-download mr-1"></i>Download
+								<i class="fas fa-download mr-1"></i>Tải xuống
 							</a>
 						</div>
 					</template>
@@ -691,7 +722,7 @@
 
 				<div class="text-center">
 					<button @click="startNewProcessing()" class="px-6 py-3 bg-blue-500 rounded-lg hover:bg-blue-600">
-						Process Another Video
+						Xử lý video khác
 					</button>
 				</div>
 			</div>
@@ -725,6 +756,7 @@
 						modelSize: "base",
 						maxChars: 50,
 						maxDuration: 6.0,
+						mergeLines: false,
 					},
 
 					// Processing
@@ -1093,45 +1125,36 @@
 						console.log("Updating steps:", currentStepId, stepProgress, status);
 
 						// Tìm step hiện tại và cập nhật
-						const currentStep = this.processingSteps.find(
+						const stepIndex = this.processingSteps.findIndex(
 							(step) => step.id === currentStepId
 						);
-						if (currentStep) {
-							currentStep.progress = Math.max(
+						if (stepIndex !== -1) {
+							this.processingSteps[stepIndex].progress = Math.max(
 								0,
 								Math.min(100, stepProgress || 0)
 							);
 
 							if (status === "completed" || stepProgress >= 100) {
-								currentStep.status = "completed";
-								currentStep.progress = 100;
+								this.processingSteps[stepIndex].status = "completed";
+								this.processingSteps[stepIndex].progress = 100;
 							} else if (status === "error") {
-								currentStep.status = "error";
+								this.processingSteps[stepIndex].status = "error";
 							} else if (stepProgress > 0) {
-								currentStep.status = "processing";
+								this.processingSteps[stepIndex].status = "processing";
 							}
 
 							console.log(
-								`Updated step ${currentStepId}: ${currentStep.status} (${currentStep.progress}%)`
+								`Updated step ${currentStepId}: ${this.processingSteps[stepIndex].status} (${this.processingSteps[stepIndex].progress}%)`
 							);
-						}
 
-						// Cập nhật các step trước đó thành completed
-						let foundCurrent = false;
-						for (let step of this.processingSteps) {
-							if (step.id === currentStepId) {
-								foundCurrent = true;
-								continue;
-							}
-
-							if (
-								!foundCurrent &&
-								step.status !== "completed" &&
-								step.status !== "skipped"
-							) {
-								step.status = "completed";
-								step.progress = 100;
-							}
+							this.processingSteps.forEach((item, index) => {
+								if (index >= stepIndex) return;
+								if (item.status !== "completed" &&
+									item.status !== "skipped") {
+									item.status = "completed";
+									item.progress = 100;
+								}
+							})
 						}
 					},
 
@@ -1310,7 +1333,7 @@
 						if (event.target.files.length > 0) {
 							this.selectedFile = event.target.files[0];
 							this.videoUrl = "";
-              event.target.value = "";
+							event.target.value = "";
 							console.log("File selected:", this.selectedFile.name);
 						}
 					},
@@ -1452,6 +1475,7 @@
 							formData.append("max_chars", this.options.maxChars);
 							formData.append("max_duration", this.options.maxDuration);
 							formData.append("model_size", this.options.modelSize);
+							formData.append("merge_lines", this.options.mergeLines);
 
 							console.log("📤 Submitting processing request...");
 							this.addLog("info", "Submitting processing request...");
@@ -1536,18 +1560,18 @@
 							status: "pending",
 						};
 						this.elapsedTime = 0,
-						this.lastProgressUpdate = null;
+							this.lastProgressUpdate = null;
 					},
 
 					async cancelProcessing() {
 						if (confirm("Are you sure you want to cancel processing?")) {
 							this.addLog("warning", "Sending cancellation request...");
-							
+
 							// Send cancel via WebSocket
 							if (this.socket && this.socket.connected && this.currentTaskId) {
 								this.socket.emit("cancel_task", { task_id: this.currentTaskId });
 							}
-							
+
 							// Also send via HTTP API as backup
 							if (this.currentTaskId) {
 								try {
@@ -1558,14 +1582,14 @@
 									console.error("Cancel API error:", error);
 								}
 							}
-							
+
 							// Update UI immediately
 							this.processingSteps.forEach((step) => {
 								if (step.status === "processing") {
 									step.status = "cancelled";
 								}
 							});
-							
+
 							this.currentStep = {
 								...this.currentStep,
 								status: "cancelled",
