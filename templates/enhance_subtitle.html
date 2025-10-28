@@ -98,7 +98,7 @@
 			<p class="text-lg md:text-xl opacity-90">Gộp, tối ưu và viết lại phụ đề một cách thông minh</p>
 			<div class="mt-4">
 				<span class="text-sm">Trạng thái: </span>
-				<span :class="connectionStatus === 'connected' ? 'text-green-400' : 'text-red-400'" x-text="connectionStatus"
+				<span :class="connectionStatus === 'Đã kết nối' ? 'text-green-400' : 'text-red-400'" x-text="connectionStatus"
 					class="font-semibold"></span>
 			</div>
 		</header>
@@ -140,8 +140,29 @@
 					<label class="block text-sm font-medium mb-2">
 						<i class="fas fa-key text-yellow-400 mr-2"></i>Khóa API Gemini (Cần thiết để tối ưu & viết lại)
 					</label>
-					<textarea x-model="apiKey" placeholder="Enter your Gemini API key here..." rows="3"
+					<textarea x-model="apiKey" placeholder="Enter your Gemini API key here..." rows="3" @change="validApiKey = null"
 						class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:border-purple-400 focus:outline-none resize-none"></textarea>
+					<div x-show="apiKey">
+						<h3 class="font-medium">
+							Khóa API đang hoạt động
+						</h3>
+						<div class="flex items-center justify-between p-2 bg-white/5 rounded-lg">
+							<div>
+								<span x-text="`...${apiKey.slice(-12)}`"></span>
+								<i x-show="validApiKey === false" class="fa fa-times text-red-400 ml-2"></i>
+								<i x-show="validApiKey" class="fa fa-check text-green-400 ml-2"></i>
+							</div>
+							<div class="flex gap-2">
+								<button
+									class="border border-green-400/30 px-2 py-1 rounded bg-green-500/20 hover:bg-green-500/30 transition-color"
+									@click="validateKeys()">Kiểm
+									tra</button>
+								<button
+									class="border border-red-400/30 px-2 py-1 rounded bg-red-500/10 text-red-400 hover:bg-red-500/30 transition-color"
+									@click="removeApiKey()">Xoá</button>
+							</div>
+						</div>
+					</div>
 					<p class="text-xs text-white/60 mt-2">
 						<i class="fas fa-info-circle mr-1"></i>
 						Nhận khóa API miễn phí từ <a href="https://makersuite.google.com/app/apikey" target="_blank"
@@ -271,7 +292,7 @@
 
 				<!-- Action Buttons -->
 				<div class="flex justify-center space-x-4 mt-6">
-					<button x-show="processingStatus === 'processing' || processingStatus === 'cancelled" @click="cancelProcess()"
+					<button x-show="processingStatus === 'processing' || processingStatus === 'cancelled'" @click="cancelProcess()"
 						class="px-6 py-3 bg-red-500/20 border border-red-400/30 rounded-lg text-red-400 hover:bg-red-500/30 transition-colors">
 						<i class="fas fa-stop mr-2"></i>Huỷ
 					</button>
@@ -299,6 +320,7 @@
 				fileName: "",
 				fileContent: null,
 				apiKey: "",
+				validApiKey: null,
 
 				options: {
 					mergeLines: true,
@@ -323,6 +345,7 @@
 
 				init() {
 					this.initWebSocket();
+					this.loadApiKeyFromStorage();
 				},
 
 				initWebSocket() {
@@ -416,7 +439,9 @@
 						formData.append('merge_lines', this.options.mergeLines);
 						formData.append('optimize_text', this.options.optimizeText);
 						formData.append('rewrite_sentences', this.options.rewriteSentences);
-						formData.append('original_name', this.fileName)
+						formData.append('original_name', this.fileName);
+
+						this.saveApiKeyToStorage(this.apiKey);
 
 						const response = await fetch("/api/enhance_subtitle", {
 							method: "POST",
@@ -487,7 +512,66 @@
 							alert('Error clearing cache');
 						}
 					}
-				}
+				},
+
+				saveApiKeyToStorage() {
+					try {
+						localStorage.setItem(
+							"enhance_api_key",
+							this.apiKey
+						);
+					} catch (error) {
+						console.error("Failed to save API keys:", error);
+					}
+				},
+
+				removeApiKey() {
+					localStorage.removeItem("enhance_api_key");
+					this.apiKey = "";
+				},
+
+				loadApiKeyFromStorage() {
+					try {
+						const stored = localStorage.getItem("enhance_api_key");
+						if (stored) {
+							this.apiKey = stored;
+						}
+					} catch (error) {
+						console.error("Error loading API key:", error);
+					}
+				},
+
+				async validateKeys() {
+					if (!this.apiKey) return;
+
+					console.log("Validating API key...");
+
+					try {
+						const response = await fetch("/api/validate_keys", {
+							method: "POST",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify({ api_keys: [this.apiKey] }),
+						});
+
+						const result = await response.json();
+						if (result.success) {
+							this.validApiKey = !!result.valid_keys;
+
+							if (result.valid_keys) {
+								this.saveApiKeyToStorage(this.apiKey);
+							}
+
+							console.log(
+								`Validation complete: ${result.valid_keys} valid, ${result.invalid_keys} invalid`
+							);
+							console.log("Valid API key:", this.validApiKey);
+						} else {
+							console.error(`Validation failed: ${result.message}`);
+						}
+					} catch (error) {
+						console.error("Validation error:", error);
+					}
+				},
 			};
 		}
 	</script>

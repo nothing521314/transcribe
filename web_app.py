@@ -1453,6 +1453,7 @@ def upload_file():
         }
 
         video_path = None
+        audio_path = None
         srt_path = None
         original_filename = None
         video_url = None
@@ -1475,6 +1476,16 @@ def upload_file():
                     file_type = "srt"
                     logger.info(f"SRT file uploaded: {srt_path}")
                     
+                # Check if it's an audio file
+                elif allowed_file(filename, "audio"):
+                    output_dir = os.path.join(UPLOAD_FOLDER, "audio")
+                    os.makedirs(output_dir, exist_ok=True)
+                    audio_path = os.path.join(output_dir, filename)
+                    file.save(audio_path)
+                    original_filename = file.filename
+                    file_type = "audio"
+                    logger.info(f"Audio file uploaded: {audio_path}")
+                    
                 # Check if it's a video file
                 elif allowed_file(filename, "video"):
                     output_dir = os.path.join(UPLOAD_FOLDER, "videos")
@@ -1487,7 +1498,7 @@ def upload_file():
                 else:
                     return jsonify({
                         "success": False,
-                        "message": "Invalid file type. Please upload a video or SRT file",
+                        "message": "Invalid file type. Please upload a video, audio, or SRT file",
                     })
 
         elif request.form.get("video_url"):
@@ -1495,17 +1506,18 @@ def upload_file():
             file_type = "url"
             logger.info(f"Received URL for enhanced processing: {video_url}")
 
-        if not video_path and not video_url and not srt_path:
+        if not video_path and not audio_path and not video_url and not srt_path:
             return jsonify({
                 "success": False,
-                "message": "Please select a video file or provide a URL",
+                "message": "Please select a video/audio file or provide a URL",
             })
 
         # Initialize task with enhanced features
         processing_tasks[task_id] = {
             "status": "queued",
             "start_time": datetime.now(),
-            "video_path": video_path,
+            "video_path": video_path or audio_path,  # Use audio_path if no video
+            "audio_path": audio_path,
             "srt_path": srt_path,
             "file_type": file_type,
             "original_filename": original_filename,
@@ -1528,22 +1540,24 @@ def upload_file():
                 task_id, srt_path, target_languages, api_keys, options
             )
         else:
-            # Process video normally
+            # Process video or audio normally
+            # For audio files, use audio_path; for video use video_path
+            media_path = audio_path if audio_path else video_path
             processing_thread = socketio.start_background_task(
                 process_video_task_enhanced,
-                task_id, video_path, target_languages, api_keys, options
+                task_id, media_path, target_languages, api_keys, options
             )
         
         # Store thread reference
         task_threads[task_id] = processing_thread
 
-        logger.info(f"Started enhanced processing task {task_id}")
+        logger.info(f"Started enhanced processing task {task_id} for {file_type}")
 
         return jsonify({
             "success": True, 
             "task_id": task_id,
             "file_type": file_type,
-            "message": "Enhanced processing started with intelligent API management"
+            "message": f"Enhanced processing started for {file_type} with intelligent API management"
         })
 
     except Exception as e:
@@ -1562,7 +1576,7 @@ def cancel_task_api(task_id):
 
         current_status = processing_tasks[task_id]["status"]
         
-        if current_status not in ["queued", "processing"]:
+        if current_status not in ["queued", "processing", "downloading"]:
             return jsonify({
                 "success": False,
                 "message": f"Cannot cancel task with status: {current_status}"
@@ -1976,11 +1990,13 @@ def download_youtube_video_api():
         
         # Initialize task
         processing_tasks[task_id] = {
-            "status": "downloading",
+            "status": "queued",  # Bắt đầu từ queued
             "start_time": datetime.now(),
             "video_url": video_url,
-            "type": "youtube_download"
+            "type": "youtube_download",
+            "message": "Initializing download..."
         }
+        cancel_flags[task_id] = False
         
         # Start download in background
         socketio.start_background_task(

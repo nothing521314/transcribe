@@ -4,7 +4,7 @@
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-	<title>AI Video Subtitle Generator</title>
+	<title>Multi YouTube Downloader</title>
 	<script src="https://cdn.tailwindcss.com"></script>
 	<script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
@@ -16,27 +16,6 @@
 					colors: {
 						primary: "#6366f1",
 						secondary: "#ec4899",
-					},
-					animation: {
-						"gradient-x": "gradient-x 15s ease infinite",
-						float: "float 6s ease-in-out infinite",
-						"pulse-slow": "pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-					},
-					keyframes: {
-						"gradient-x": {
-							"0%, 100%": {
-								"background-size": "200% 200%",
-								"background-position": "left center",
-							},
-							"50%": {
-								"background-size": "200% 200%",
-								"background-position": "right center",
-							},
-						},
-						float: {
-							"0%, 100%": { transform: "translateY(0px)" },
-							"50%": { transform: "translateY(-20px)" },
-						},
 					},
 				},
 			},
@@ -50,15 +29,8 @@
 		}
 
 		@keyframes gradient {
-
-			0%,
-			100% {
-				background-position: 0% 50%;
-			}
-
-			50% {
-				background-position: 100% 50%;
-			}
+			0%, 100% { background-position: 0% 50%; }
+			50% { background-position: 100% 50%; }
 		}
 
 		.glass-effect {
@@ -67,41 +39,16 @@
 			border: 1px solid rgba(255, 255, 255, 0.2);
 		}
 
-		.neon-glow {
-			box-shadow: 0 0 5px theme("colors.primary"),
-				0 0 20px theme("colors.primary"), 0 0 35px theme("colors.primary");
-		}
-
-		.custom-scrollbar::-webkit-scrollbar {
-			width: 8px;
-		}
-
-		.custom-scrollbar::-webkit-scrollbar-track {
-			background: #f1f1f1;
-			border-radius: 10px;
-		}
-
-		.custom-scrollbar::-webkit-scrollbar-thumb {
-			background: #6366f1;
-			border-radius: 10px;
-		}
-
-		.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-			background: #4f46e5;
-		}
-
-		/* Fix for loading issues */
 		[x-cloak] {
 			display: none !important;
 		}
 
-		/* Better button styles */
 		.btn-primary {
 			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 			transition: all 0.3s ease;
 		}
 
-		.btn-primary:hover {
+		.btn-primary:hover:not(:disabled) {
 			transform: translateY(-2px);
 			box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
 		}
@@ -111,208 +58,216 @@
 			transform: none;
 			cursor: not-allowed;
 		}
+
+		.custom-scrollbar::-webkit-scrollbar {
+			width: 8px;
+		}
+
+		.custom-scrollbar::-webkit-scrollbar-track {
+			background: rgba(255, 255, 255, 0.1);
+			border-radius: 10px;
+		}
+
+		.custom-scrollbar::-webkit-scrollbar-thumb {
+			background: #6366f1;
+			border-radius: 10px;
+		}
 	</style>
 </head>
 
 <body class="min-h-screen gradient-bg text-white custom-scrollbar">
-	<div x-data="downloadVideoApp()" x-init="init()" x-cloak class="container mx-auto px-24 py-8">
+	<div x-data="multiDownloaderApp()" x-init="init()" x-cloak class="container mx-auto px-4 md:px-8 py-8">
 		<!-- Header -->
 		<header class="text-center mb-12">
-			<h1 class="text-5xl font-bold mb-4">📥 Trình Tải Video YouTube</h1>
-			<p class="text-xl opacity-90">Tải video từ YouTube một cách dễ dàng</p>
+			<h1 class="text-4xl md:text-5xl font-bold mb-4">📥 Multi YouTube Downloader</h1>
+			<p class="text-lg opacity-90">Tải nhiều video YouTube cùng lúc</p>
 			<div class="mt-4">
 				<span class="text-sm">Trạng thái: </span>
-				<span :class="connectionStatus === 'connected' ? 'text-green-400' : 'text-red-400'" x-text="connectionStatus"
-					class="font-semibold"></span>
+				<span :class="connectionStatus === 'connected' ? 'text-green-400' : 'text-red-400'" x-text="connectionStatus" class="font-semibold"></span>
 			</div>
 		</header>
-		<div class="mb-2 flex justify-end space-x-4">
+		<div class="mb-2 flex justify-end space-x-4 max-w-4xl mx-auto">
 			<a href="/" class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
 				<i class="fas fa-home mr-2"></i>Trang Chủ
 			</a>
 		</div>
 
-		<!-- Upload Section -->
-		<div class="glass-effect rounded-xl p-6 mb-8">
-			<div>
-				<h3 class="text-xl font-bold mb-4">
-					<i class="fas fa-link text-purple-400 mr-2"></i>Video URL
-				</h3>
-				<div class="space-y-4">
-					<input type="url" x-model="videoUrl" placeholder="https://youtube.com/watch?v=..."
-						class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:border-purple-400 focus:outline-none" />
-
-					<div class="bg-blue-500/20 border border-blue-400/30 rounded-lg p-3">
-						<p class="text-sm text-blue-200">
-							<i class="fas fa-info-circle mr-2"></i>
-							Hỗ trợ video YouTube (tối đa chất lượng 1080p)
-						</p>
-					</div>
-				</div>
+		<!-- Input Section -->
+		<div class="glass-effect rounded-xl p-6 mb-8 max-w-4xl mx-auto">
+			<h3 class="text-xl font-bold mb-4">
+				<i class="fas fa-link text-purple-400 mr-2"></i>Thêm video YouTube
+			</h3>
+			<div class="flex gap-3">
+				<input 
+					type="url" 
+					x-model="newVideoUrl" 
+					@keydown.enter="addDownload()"
+					placeholder="https://youtube.com/watch?v=..."
+					class="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:border-purple-400 focus:outline-none"
+				/>
+				<button 
+					@click="addDownload()"
+					:disabled="!newVideoUrl || !connectionStatus === 'connected'"
+					class="btn-primary px-6 py-3 rounded-lg font-bold whitespace-nowrap disabled:opacity-50"
+				>
+					<i class="fas fa-plus mr-2"></i>Thêm
+				</button>
 			</div>
+			<p class="text-sm text-white/60 mt-3">
+				<i class="fas fa-info-circle mr-2"></i>
+				Nhập URL YouTube và nhấn Enter hoặc click Thêm
+			</p>
 		</div>
 
-		<!-- Submit Button -->
-		<div class="text-center mb-8">
-			<button @click="submitForm()" :disabled="processing || !videoUrl"
-				class="btn-primary px-8 py-4 rounded-xl font-bold text-lg shadow-lg">
-				<template x-if="!processing">
-					<span><i class="fas fa-magic mr-2"></i>Tải về</span>
-				</template>
-				<template x-if="processing">
-					<span><i class="fas fa-spinner fa-spin mr-2"></i>Đang tải...</span>
-				</template>
-			</button>
-		</div>
-
-		<!-- Download Progress Modal -->
-		<div x-show="processing" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" x-cloak>
-			<div class="glass-effect rounded-xl p-8 max-w-2xl w-full mx-4">
-				<!-- Header -->
-				<div class="text-center mb-6">
-					<div
-						class="w-20 h-20 mx-auto mb-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-						<i class="fas fa-download text-3xl text-white" :class="{'fa-bounce': downloadStatus === 'downloading'}"></i>
-					</div>
-					<h3 class="text-3xl font-bold mb-2">Đang tải video</h3>
-					<p class="text-white/80" x-text="downloadMessage"></p>
+		<!-- Downloads List -->
+		<div class="max-w-4xl mx-auto">
+			<template x-if="downloads.length === 0">
+				<div class="glass-effect rounded-xl p-12 text-center">
+					<i class="fas fa-inbox text-5xl text-white/50 mb-4 block"></i>
+					<p class="text-white/70">Chưa có video nào. Thêm URL YouTube để bắt đầu.</p>
 				</div>
+			</template>
 
-				<!-- Progress Section (Downloading) -->
-				<div x-show="downloadStatus === 'downloading'" class="mb-6">
-					<!-- Progress Bar -->
-					<div class="mb-4">
-						<div class="flex justify-between text-sm mb-2">
-							<span class="font-medium">Tiến độ tải</span>
-							<span x-text="`${Math.round(downloadProgress)}%`" class="font-bold"></span>
+			<div class="space-y-4">
+				<template x-for="(download, index) in downloads" :key="download.id">
+					<div class="glass-effect rounded-lg p-5">
+						<!-- Header -->
+						<div class="flex items-center justify-between mb-4">
+							<div class="flex-1">
+								<p class="text-sm text-white/60 truncate" x-text="download.url"></p>
+								<h4 class="text-lg font-semibold mt-1" x-text="download.title || 'Đang tải thông tin...'"></h4>
+							</div>
+							<div class="ml-4 flex items-center gap-2">
+								<template x-if="download.status === 'waiting'">
+									<button 
+										@click="startDownload(index)"
+										class="bg-blue-500/30 hover:bg-blue-500/50 px-4 py-2 rounded-lg text-blue-300 font-semibold transition"
+									>
+										<i class="fas fa-play mr-1"></i>Tải
+									</button>
+								</template>
+								<template x-if="download.status === 'downloading'">
+									<button 
+										@click="cancelDownload(index)"
+										class="bg-red-500/30 hover:bg-red-500/50 px-4 py-2 rounded-lg text-red-300 font-semibold transition"
+									>
+										<i class="fas fa-stop mr-1"></i>Dừng
+									</button>
+								</template>
+								<template x-if="download.status === 'completed'">
+									<a :href="download.downloadUrl" download :download="download.filename">
+										<button class="bg-green-500/30 hover:bg-green-500/50 px-4 py-2 rounded-lg text-green-300 font-semibold transition">
+											<i class="fas fa-download mr-1"></i>Lưu
+										</button>
+									</a>
+								</template>
+								<button 
+									@click="removeDownload(index)"
+									class="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition"
+									:disabled="download.status === 'downloading'"
+								>
+									<i class="fas fa-trash"></i>
+								</button>
+							</div>
 						</div>
-						<div class="w-full bg-white/20 rounded-full h-6 relative overflow-hidden">
-							<div
-								class="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 rounded-full transition-all duration-500"
-								:style="`width: ${downloadProgress}%`">
-								<div
-									class="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-pulse">
+
+						<!-- Status Line -->
+						<div class="text-sm text-white/70 mb-3">
+							<template x-if="download.status === 'waiting'">
+								<span>Chờ xử lý...</span>
+							</template>
+							<template x-if="download.status === 'downloading'">
+								<span x-text="`Đang tải: ${Math.round(download.progress)}% • Tốc độ: ${download.speed || '--'} • Thời gian còn: ${formatETA(download.eta)}`"></span>
+							</template>
+							<template x-if="download.status === 'completed'">
+								<span class="text-green-400">
+									✓ Hoàn thành (<span x-text="formatFileSize(download.fileSize)"></span>)
+								</span>
+							</template>
+							<template x-if="download.status === 'error'">
+								<span class="text-red-400">✗ Lỗi: <span x-text="download.error"></span></span>
+							</template>
+							<template x-if="download.status === 'cancelled'">
+								<span class="text-yellow-400">⊘ Đã hủy</span>
+							</template>
+						</div>
+
+						<!-- Progress Bar (Download Only) -->
+						<template x-if="download.status === 'downloading' || (download.status === 'completed' && download.progress > 0)">
+							<div class="mb-3">
+								<div class="w-full bg-white/20 rounded-full h-2 relative overflow-hidden">
+									<div
+										class="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-300"
+										:style="`width: ${Math.min(download.progress, 100)}%`"
+									></div>
 								</div>
 							</div>
-							<div class="absolute inset-0 flex items-center justify-center text-sm font-bold text-white/90"
-								x-text="`${Math.round(downloadProgress)}%`"></div>
-						</div>
+						</template>
+
+						<!-- Download Details -->
+						<template x-if="download.status === 'downloading'">
+							<div class="grid grid-cols-3 gap-2 text-xs">
+								<div class="bg-white/5 rounded p-2">
+									<div class="text-white/60">Đã tải</div>
+									<div class="font-semibold" x-text="formatFileSize(download.downloaded || 0)"></div>
+								</div>
+								<div class="bg-white/5 rounded p-2">
+									<div class="text-white/60">Tổng</div>
+									<div class="font-semibold" x-text="formatFileSize(download.total || 0)"></div>
+								</div>
+								<div class="bg-white/5 rounded p-2">
+									<div class="text-white/60">Tiến độ</div>
+									<div class="font-semibold" x-text="`${Math.round(download.progress)}%`"></div>
+								</div>
+							</div>
+						</template>
 					</div>
-
-					<!-- Download Stats -->
-					<div class="grid grid-cols-2 gap-4">
-						<div class="bg-white/5 rounded-lg p-4">
-							<div class="text-sm text-white/60 mb-1">Tốc độ tải</div>
-							<div class="text-xl font-bold text-green-400" x-text="downloadSpeed || '--'"></div>
-						</div>
-						<div class="bg-white/5 rounded-lg p-4">
-							<div class="text-sm text-white/60 mb-1">Thời gian còn lại</div>
-							<div class="text-xl font-bold text-orange-400" x-text="formatETA(downloadETA)"></div>
-						</div>
-					</div>
-				</div>
-
-				<!-- Success Section -->
-				<div x-show="downloadStatus === 'completed'" class="mb-6">
-					<div class="bg-green-500/20 border border-green-400/30 rounded-lg p-6 text-center">
-						<i class="fas fa-check-circle text-5xl text-green-400 mb-4"></i>
-						<h4 class="text-2xl font-bold text-green-400 mb-2">
-							Tải về thành công!
-						</h4>
-						<p class="text-white/80 mb-4" x-text="downloadTitle"></p>
-						<div class="text-sm text-white/60">
-							Dung lượng tệp:
-							<span x-text="formatFileSize(downloadFileSize)"></span>
-						</div>
-					</div>
-
-					<!-- Download Button -->
-					<a :href="downloadUrl" download class="block mt-6">
-						<button class="w-full btn-primary px-6 py-4 rounded-xl font-bold text-lg shadow-lg">
-							<i class="fas fa-download mr-2"></i>Lưu video
-						</button>
-					</a>
-				</div>
-
-				<!-- Error Section -->
-				<div x-show="downloadStatus === 'error'" class="mb-6">
-					<div class="bg-red-500/20 border border-red-400/30 rounded-lg p-6 text-center">
-						<i class="fas fa-exclamation-circle text-5xl text-red-400 mb-4"></i>
-						<h4 class="text-2xl font-bold text-red-400 mb-2">
-							Tải về thất bại
-						</h4>
-						<p class="text-white/80" x-text="downloadMessage"></p>
-					</div>
-				</div>
-
-				<!-- Cancelled Section -->
-				<div x-show="downloadStatus === 'cancelled'" class="mb-6">
-					<div class="bg-yellow-500/20 border border-yellow-400/30 rounded-lg p-6 text-center">
-						<i class="fas fa-stop-circle text-5xl text-yellow-400 mb-4"></i>
-						<h4 class="text-2xl font-bold text-yellow-400 mb-2">
-							Đã hủy tải về
-						</h4>
-						<p class="text-white/80">Tải xuống đã bị hủy bởi người dùng</p>
-					</div>
-				</div>
-
-				<!-- Action Buttons -->
-				<div class="flex justify-center space-x-4 mt-6">
-					<button x-show="downloadStatus === 'downloading'" @click="cancelDownload()"
-						class="px-6 py-3 bg-red-500/20 border border-red-400/30 rounded-lg text-red-400 hover:bg-red-500/30 transition-colors">
-						<i class="fas fa-stop mr-2"></i>Hủy
-					</button>
-
-					<button x-show="downloadStatus !== 'downloading'" @click="resetDownload()"
-						class="px-6 py-3 bg-blue-500/20 border border-blue-400/30 rounded-lg text-blue-400 hover:bg-blue-500/30 transition-colors">
-						<i class="fas fa-redo mr-2"></i>Tải video khác
-					</button>
-
-					<button x-show="downloadStatus === 'downloading'" @click="processing = false"
-						class="px-6 py-3 bg-gray-500/20 border border-gray-400/30 rounded-lg text-gray-400 hover:bg-gray-500/30 transition-colors">
-						<i class="fas fa-minus mr-2"></i>Thu nhỏ
-					</button>
-				</div>
+				</template>
 			</div>
 		</div>
+
+		<!-- Summary -->
+		<template x-if="downloads.length > 0">
+			<div class="max-w-4xl mx-auto mt-8 glass-effect rounded-lg p-4">
+				<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+					<div>
+						<div class="text-sm text-white/60">Tổng cộng</div>
+						<div class="text-2xl font-bold" x-text="downloads.length"></div>
+					</div>
+					<div>
+						<div class="text-sm text-white/60">Đang tải</div>
+						<div class="text-2xl font-bold text-blue-400" x-text="downloads.filter(d => d.status === 'downloading').length"></div>
+					</div>
+					<div>
+						<div class="text-sm text-white/60">Hoàn thành</div>
+						<div class="text-2xl font-bold text-green-400" x-text="downloads.filter(d => d.status === 'completed').length"></div>
+					</div>
+					<div>
+						<div class="text-sm text-white/60">Lỗi</div>
+						<div class="text-2xl font-bold text-red-400" x-text="downloads.filter(d => d.status === 'error').length"></div>
+					</div>
+				</div>
+			</div>
+		</template>
 	</div>
 
 	<script>
-		function downloadVideoApp() {
+		function multiDownloaderApp() {
 			return {
-				// Connection
 				socket: null,
 				connectionStatus: "disconnected",
-				// Debug properties
-				roomJoined: false,
-				lastProgressUpdate: null,
-				connectionAttempts: 0,
-
-				// Form Data
-				videoUrl: "",
-
-				// Download state
-				processing: false,
-				currentTaskId: null,
-				downloadStatus: "", // downloading, completed, error, cancelled
-				downloadProgress: 0,
-				downloadSpeed: "",
-				downloadETA: 0,
-				downloadMessage: "Initializing download...",
-				downloadUrl: "",
-				downloadTitle: "",
-				downloadFileSize: 0,
+				newVideoUrl: "",
+				downloads: [],
+				nextId: 0,
+				progressUpdateInterval: 1000, // 1 second
 
 				async init() {
 					this.initWebSocket();
 				},
 
 				initWebSocket() {
-					const socketUrl = window.location.origin;
-					console.log("Connecting to WebSocket...");
-
 					try {
-						this.socket = io(socketUrl, {
+						this.socket = io(window.location.origin, {
 							transports: ["websocket", "polling"],
 							timeout: 60000,
 							reconnection: true,
@@ -322,158 +277,152 @@
 
 						this.socket.on("connect", () => {
 							this.connectionStatus = "connected";
-							console.log("WebSocket connected:", this.socket.id);
-
-							if (this.processing && this.currentTaskId) {
-								this.joinTaskRoom(this.currentTaskId);
-							}
+							console.log("Connected:", this.socket.id);
 						});
 
-						this.socket.on("disconnect", (reason) => {
+						this.socket.on("disconnect", () => {
 							this.connectionStatus = "disconnected";
-							console.log("WebSocket disconnected:", reason);
+							console.log("Disconnected");
 						});
 
 						this.socket.on("connect_error", (error) => {
 							this.connectionStatus = "error";
-							console.error("WebSocket connection error:", error);
-						});
-
-						this.socket.on("room_joined", (data) => {
-							console.log("Joined room:", data);
+							console.error("Connection error:", error);
 						});
 
 						this.socket.on("download_progress", (data) => {
-							console.log("Download progress:", data);
+							const download = this.downloads.find(d => d.id === data.task_id);
+							if (!download) return;
 
-							this.downloadStatus = data.status;
-							this.downloadMessage = data.message || "";
+							download.status = data.status;
+							download.message = data.message || "";
 
 							switch (data.status) {
 								case "downloading":
-									this.downloadProgress = data.progress || 0;
-									this.downloadSpeed = data.speed || "";
-									this.downloadETA = data.eta || 0;
+									download.progress = Math.min(data.progress || 0, 100);
+									download.speed = data.speed || "";
+									download.eta = data.eta || 0;
+									download.downloaded = data.downloaded || 0;
+									download.total = data.total || 0;
 									break;
 
 								case "completed":
-									this.downloadProgress = 100;
-									this.downloadUrl = data.download_url || "";
-									this.downloadTitle = data.title || "Video";
-									this.downloadFileSize = data.file_size || 0;
+									download.progress = 100;
+									download.downloadUrl = data.download_url || "";
+									download.title = data.title || "Video";
+									download.fileSize = data.file_size || 0;
+									download.filename = data.filename || "video.mp4";
 									break;
 
 								case "error":
-									this.downloadProgress = 0;
+									download.progress = 0;
+									download.error = data.message || "Unknown error";
 									break;
 
 								case "cancelled":
-									this.downloadProgress = 0;
+									download.progress = 0;
 									break;
 							}
 						});
 
 					} catch (error) {
-						console.error("WebSocket initialization failed:", error);
+						console.error("WebSocket init failed:", error);
 						this.connectionStatus = "error";
 					}
 				},
 
-				joinTaskRoom(taskId) {
-					if (!this.socket || !this.socket.connected) {
-						console.error("Cannot join room - socket not connected");
-						return;
-					}
+				async addDownload() {
+					if (!this.newVideoUrl) return;
 
-					console.log("Joining task room:", taskId);
-					this.socket.emit("join_task", { task_id: taskId });
+					const id = ++this.nextId;
+					const download = {
+						id: id,
+						url: this.newVideoUrl,
+						title: "Đang tải thông tin...",
+						status: "waiting",
+						progress: 0,
+						speed: "",
+						eta: 0,
+						downloaded: 0,
+						total: 0,
+						fileSize: 0,
+						downloadUrl: "",
+						filename: "",
+						error: "",
+						taskId: null,
+					};
+
+					this.downloads.push(download);
+					this.newVideoUrl = "";
 				},
 
-				// Form Submission
-				async submitForm() {
-					if (!this.videoUrl) {
-						alert("Please enter a YouTube URL");
-						return;
-					}
+				async startDownload(index) {
+					const download = this.downloads[index];
+					if (!download || download.status !== "waiting") return;
 
-					if (!this.socket || !this.socket.connected) {
-						alert("Not connected to server. Please refresh the page.");
-						return;
-					}
-
-					this.processing = true;
-					this.currentTaskId = null;
+					download.status = "downloading";
 
 					try {
 						const response = await fetch("/api/download_youtube", {
 							method: "POST",
-							headers: {
-								"Content-Type": "application/json",
-							},
-							body: JSON.stringify({
-								video_url: this.videoUrl,
-							}),
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify({ video_url: download.url }),
 						});
 
 						const result = await response.json();
 
 						if (result.success) {
-							this.currentTaskId = result.task_id;
-							this.joinTaskRoom(this.currentTaskId);
+							download.taskId = result.task_id;
+							download.id = result.task_id; // Use task_id for socket updates
+
+							// Join task room
+							if (this.socket && this.socket.connected) {
+								this.socket.emit("join_task", { task_id: result.task_id });
+							}
 						} else {
 							throw new Error(result.message || "Unknown error");
 						}
 					} catch (error) {
-						console.error("Submit error:", error);
-						alert(`Error: ${error.message}`);
-						this.processing = false;
+						console.error("Start download error:", error);
+						download.status = "error";
+						download.error = error.message;
 					}
 				},
 
-				async cancelDownload() {
-					if (!this.currentTaskId) return;
+				async cancelDownload(index) {
+					const download = this.downloads[index];
+					if (!download || download.status !== "downloading") return;
 
-					if (confirm("Are you sure you want to cancel this download?")) {
-						try {
-							await fetch(`/api/cancel_task/${this.currentTaskId}`, {
-								method: "POST"
-							});
-							this.downloadStatus = "cancelled";
-						} catch (error) {
-							console.error("Cancel error:", error);
-						}
+					if (!confirm("Hủy download này?")) return;
+
+					try {
+						await fetch(`/api/cancel_task/${download.id}`, {
+							method: "POST",
+						});
+						download.status = "cancelled";
+					} catch (error) {
+						console.error("Cancel error:", error);
 					}
 				},
 
-				resetDownload() {
-					this.processing = false;
-					this.currentTaskId = null;
-					this.downloadStatus = "";
-					this.downloadProgress = 0;
-					this.downloadSpeed = "";
-					this.downloadETA = 0;
-					this.downloadMessage = "";
-					this.downloadUrl = "";
-					this.downloadTitle = "";
-					this.downloadFileSize = 0;
-					this.videoUrl = "";
+				removeDownload(index) {
+					if (this.downloads[index].status === "downloading") {
+						alert("Không thể xóa khi đang tải");
+						return;
+					}
+					this.downloads.splice(index, 1);
 				},
 
 				formatETA(seconds) {
 					if (!seconds || seconds < 0) return "--";
-
 					const mins = Math.floor(seconds / 60);
 					const secs = Math.floor(seconds % 60);
-
-					if (mins > 0) {
-						return `${mins}m ${secs}s`;
-					}
+					if (mins > 0) return `${mins}m ${secs}s`;
 					return `${secs}s`;
 				},
 
 				formatFileSize(bytes) {
 					if (!bytes) return "--";
-
 					const sizes = ["Bytes", "KB", "MB", "GB"];
 					const i = Math.floor(Math.log(bytes) / Math.log(1024));
 					return Math.round((bytes / Math.pow(1024, i)) * 100) / 100 + " " + sizes[i];

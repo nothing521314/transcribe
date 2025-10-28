@@ -127,13 +127,7 @@
 					x-text="connectionStatus" class="font-semibold"></span>
 			</div>
 		</header>
-		<div class="flex mb-2 justify-between">
-			<div>
-				<button x-show="!processing && currentStep.status === 'pending'" @click="processing = true"
-					class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
-					</i>Đang xử lý...
-				</button>
-			</div>
+		<div class="flex mb-2 justify-end">
 			<div class="flex justify-end space-x-4">
 				<a href="/enhance_subtitle"
 					class="glass-effect px-4 py-2 rounded-lg hover:bg-white/20 transition-all duration-300">
@@ -675,10 +669,10 @@
 					</button>
 
 					<!-- Minimize Button -->
-					<button @click="processing = false"
+					<!-- <button @click="processing = false"
 						class="px-6 py-3 bg-gray-500/20 border border-gray-400/30 rounded-lg text-gray-400 hover:bg-gray-500/30 transition-colors flex items-center">
 						<i class="fas fa-minus mr-2"></i>Thu nhỏ
-					</button>
+					</button> -->
 				</div>
 
 				<!-- Processing Statistics -->
