@@ -229,7 +229,7 @@ class VideoSubtitleProcessor:
                     'start': segment.start,
                     'end': segment.end,
                     'text': segment.text,
-                    # Thêm info khác nếu cần, ví dụ: 'words': segment.words
+                    'words': segment.words if hasattr(segment, 'words') else None
                 })
             
             # Trả về kết quả dưới dạng Dict để tương thích với phần code còn lại
@@ -325,6 +325,12 @@ class VideoSubtitleProcessor:
         
         improved_segments = []
         
+        # Step 0: Split long segments into sentences using word timestamps
+        segments = self._split_segments_by_sentences(segments)
+        
+        # Step 0: Merge fragments intelligently to form complete sentences first
+        segments = self._merge_fragments(segments, max_chars_per_line)
+        
         for segment in segments:
             text = segment['text'].strip()
             start_time = segment['start']
@@ -342,12 +348,29 @@ class VideoSubtitleProcessor:
             # Clean text
             text = self._clean_subtitle_text(text)
             
+            # Allow complete sentences to exceed max_chars slightly (20%) to avoid unnecessary splitting
+            is_complete_sentence = text[-1] in '.!?' if text else False
+            limit_tolerance = 1.2 if is_complete_sentence else 1.0
+            
+            # Handle 0 as unlimited (infinite)
+            effective_char_limit = (max_chars_per_line * limit_tolerance) if max_chars_per_line > 0 else float('inf')
+            effective_max_duration = max_duration if max_duration > 0 else float('inf')
+            
             # Handle long segments
-            if allow_split and len(text) > max_chars_per_line or duration > max_duration:
-                chunks = self._split_text_intelligently(text, max_chars_per_line)
+            # Only split if limits are enabled (>0) and exceeded
+            exceeds_chars = max_chars_per_line > 0 and len(text) > effective_char_limit
+            exceeds_duration = max_duration > 0 and duration > effective_max_duration
+            
+            if allow_split and (exceeds_chars or exceeds_duration):
+                # Only split text if it actually exceeds the effective limit
+                if exceeds_chars:
+                    chunks = self._split_text_intelligently(text, max_chars_per_line)
+                else:
+                    # If here only because of duration, keep text intact
+                    chunks = [text]
                 
                 if len(chunks) > 1:
-                    chunk_duration = min(duration / len(chunks), max_duration)
+                    chunk_duration = duration / len(chunks)
                     
                     for i, chunk in enumerate(chunks):
                         chunk_start = start_time + (i * chunk_duration)
@@ -359,9 +382,14 @@ class VideoSubtitleProcessor:
                             'text': chunk.strip()
                         })
                 else:
+                    final_end = end_time
+                    # Only cap duration if max_duration is set (>0) and text is short enough
+                    if max_duration > 0 and (max_chars_per_line <= 0 or len(text) <= max_chars_per_line):
+                        final_end = min(start_time + max_duration, end_time)
+                    
                     improved_segments.append({
                         'start': start_time,
-                        'end': min(start_time + max_duration, end_time),
+                        'end': final_end,
                         'text': text
                     })
             else:
@@ -373,7 +401,144 @@ class VideoSubtitleProcessor:
         
         logger.info(f"✅ Optimized to {len(improved_segments)} segments")
         return improved_segments
-    
+
+    def _merge_fragments(self, segments: List[Dict], max_chars: int, max_gap: float = 2.0) -> List[Dict]:
+        """
+        Merge short segments that are likely parts of the same sentence.
+        Logic: If a segment doesn't end with punctuation, try to merge with next.
+        """
+        if not segments:
+            return []
+        
+        merged = []
+        current = segments[0]
+        
+        # Treat 0 as unlimited for merging purposes
+        limit = float('inf') if max_chars <= 0 else max_chars
+        
+        for next_seg in segments[1:]:
+            text = current['text'].strip()
+            next_text = next_seg['text'].strip()
+            
+            if not text:
+                current = next_seg
+                continue
+                
+            # Check if current segment ends with sentence punctuation
+            is_sentence_end = text[-1] in '.!?' if text else False
+            
+            gap = next_seg['start'] - current['end']
+            combined_len = len(text) + 1 + len(next_text)
+            
+            should_merge = False
+            
+            # Only merge if gap is reasonable (not a long silence)
+            if gap < max_gap:
+                # Case 1: Not a sentence end -> Merge to complete the sentence (allow slightly over max_chars)
+                if not is_sentence_end and combined_len <= limit * 1.2:
+                    should_merge = True
+                # Case 2: Is a sentence end, but both parts are very short -> Merge to fill the line
+                elif is_sentence_end and combined_len <= limit and len(text) < 15:
+                    should_merge = True
+            
+            if should_merge:
+                current['end'] = next_seg['end']
+                current['text'] = text + " " + next_text
+            else:
+                merged.append(current)
+                current = next_seg
+                
+        merged.append(current)
+        return merged
+
+    def _split_segments_by_sentences(self, segments: List[Dict]) -> List[Dict]:
+        """
+        Split segments containing multiple sentences into individual sentence segments
+        using word timestamps.
+        """
+        # Common abbreviations that end with a dot but aren't sentence ends
+        abbreviations = {
+            'mr.', 'mrs.', 'ms.', 'dr.', 'prof.', 'sr.', 'jr.', 'vs.', 'no.', 'fig.', 'st.', 'co.', 'ltd.', 'inc.',
+            'u.s.', 'u.k.', 'e.g.', 'i.e.', 'etc.'
+        }
+        
+        new_segments = []
+        for seg in segments:
+            # Fallback: If no words info, use text-based splitting with interpolation
+            if not seg.get('words'):
+                text = seg['text'].strip()
+                # Split by sentence endings, keeping the punctuation
+                # Regex: Split after .!? followed by space and uppercase letter/number
+                sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z0-9])', text)
+                
+                if len(sentences) > 1:
+                    duration = seg['end'] - seg['start']
+                    total_chars = len(text)
+                    current_start = seg['start']
+                    
+                    for sentence in sentences:
+                        # Estimate duration based on character count
+                        sent_duration = duration * (len(sentence) / total_chars)
+                        new_segments.append({
+                            'start': current_start,
+                            'end': current_start + sent_duration,
+                            'text': sentence,
+                            'words': None
+                        })
+                        current_start += sent_duration
+                else:
+                    new_segments.append(seg)
+                continue
+                
+            words = seg['words']
+            current_words = []
+            
+            for i, word in enumerate(words):
+                current_words.append(word)
+                w_text = word.word.strip()
+                w_lower = w_text.lower()
+                
+                # Check for sentence endings
+                is_end_char = w_text and (w_text[-1] in '.!?' or (len(w_text) > 1 and w_text[-2] in '.!?' and w_text[-1] in '"\''))
+                
+                # Check if it's an abbreviation
+                is_abbrev = w_lower in abbreviations
+                
+                # Heuristic: Check next word to confirm sentence boundary
+                is_real_end = is_end_char and not is_abbrev
+                
+                if is_real_end and i + 1 < len(words):
+                    next_word = words[i+1].word.strip()
+                    # If next word starts with lowercase, it's likely not a sentence end (e.g. "end. but")
+                    if next_word and next_word[0].islower():
+                        is_real_end = False
+
+                if is_real_end:
+                    # Found a sentence boundary
+                    if current_words:
+                        # Reconstruct text from words
+                        text = "".join([w.word for w in current_words]).strip()
+                        
+                        new_segments.append({
+                            'start': current_words[0].start,
+                            'end': current_words[-1].end,
+                            'text': text,
+                            'words': current_words
+                        })
+                        current_words = []
+            
+            # Append any remaining words
+            if current_words:
+                text = "".join([w.word for w in current_words]).strip()
+                new_segments.append({
+                    'start': current_words[0].start,
+                    'end': current_words[-1].end,
+                    'text': text,
+                    'words': current_words
+                })
+                
+        return new_segments
+
     def _clean_subtitle_text(self, text: str) -> str:
         """Clean subtitle text"""
         if not text:

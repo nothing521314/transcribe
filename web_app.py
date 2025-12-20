@@ -209,6 +209,7 @@ class CancellableWhisperModel:
                     'start': segment.start,
                     'end': segment.end,
                     'text': segment.text,
+                    'words': segment.words if hasattr(segment, 'words') else None
                 })
                 
                 current_time = time.time()
@@ -718,6 +719,18 @@ def process_video_task_enhanced(
 
         file_hash = get_file_hash(video_path)
         cached_transcription = load_from_cache(file_hash, "transcription")
+        
+        # Validate cache has words info (required for sentence splitting)
+        if cached_transcription and 'segments' in cached_transcription:
+            has_words = False
+            for seg in cached_transcription['segments'][:5]: # Check first few segments
+                if seg.get('words'):
+                    has_words = True
+                    break
+            if not has_words:
+                logger.warning("⚠️ Cached transcription missing word timestamps. Re-transcribing...")
+                cached_transcription = None
+
         socketio.sleep(0)
 
         # Step 3: Transcription
