@@ -54,9 +54,9 @@ log_success "Prerequisites check passed"
 log_step "Creating directory structure..."
 
 directories=(
-    "uploads" "output" "cache" "temp" "logs" 
-    "static/css" "static/js" "templates"
-    "scripts"
+    "uploads" "output/enhanced_subtitles" "output/srt" "output/texts"
+    "output/translations" "output/youtube_downloads" "cache"
+    "templates" "scripts"
 )
 
 for dir in "${directories[@]}"; do

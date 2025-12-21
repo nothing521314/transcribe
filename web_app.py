@@ -880,7 +880,7 @@ def process_video_task_enhanced(
         # Prepare results for frontend
         files_for_download = []
         files_for_download.append({
-            "filename": os.path.basename(original_srt_path),
+            "filename": os.path.relpath(original_srt_path, OUTPUT_FOLDER),
             "name": "Bản gốc (English)",
             "flag": "🇺🇸",
         })
@@ -888,7 +888,7 @@ def process_video_task_enhanced(
         for lang, file_path in translated_files.items():
             lang_info = SUPPORTED_LANGUAGES.get(lang, {})
             files_for_download.append({
-                "filename": os.path.basename(file_path),
+                "filename": os.path.relpath(file_path, OUTPUT_FOLDER),
                 "name": lang_info.get("native", lang.capitalize()),
                 "flag": lang_info.get("flag", "🌍"),
             })
@@ -1196,7 +1196,6 @@ def process_srt_task_enhanced(
                 translated_texts_dict = processor.enhanced_parallel_translate(
                     texts, target_languages, task_id
                 )
-                
                 total_langs = len(translated_texts_dict)
                 processed_langs = 0
 
@@ -1255,7 +1254,7 @@ def process_srt_task_enhanced(
         # Prepare results for frontend
         files_for_download = []
         files_for_download.append({
-            "filename": os.path.basename(original_srt_path),
+            "filename": os.path.relpath(original_srt_path, OUTPUT_FOLDER),
             "name": "Bản gốc (Optimized)",
             "flag": "✨",
         })
@@ -1263,7 +1262,7 @@ def process_srt_task_enhanced(
         for lang, file_path in translated_files.items():
             lang_info = SUPPORTED_LANGUAGES.get(lang, {})
             files_for_download.append({
-                "filename": os.path.basename(file_path),
+                "filename": os.path.relpath(file_path, OUTPUT_FOLDER),
                 "name": lang_info.get("native", lang.capitalize()),
                 "flag": lang_info.get("flag", "🌍"),
             })
@@ -1962,7 +1961,7 @@ def get_progress(task_id):
             response['results']['files'].append({
                 'language': 'original',
                 'name': 'English (Original)',
-                'filename': os.path.basename(task['results']['original_srt']),
+                'filename': os.path.relpath(task['results']['original_srt'], OUTPUT_FOLDER),
                 'path': task['results']['original_srt']
             })
         
@@ -1973,7 +1972,7 @@ def get_progress(task_id):
                 response['results']['files'].append({
                     'language': lang,
                     'name': lang_info.get('native', lang.title()),
-                    'filename': os.path.basename(file_path),
+                    'filename': os.path.relpath(file_path, OUTPUT_FOLDER),
                     'path': file_path,
                     'flag': lang_info.get('flag', '🌍')
                 })
