@@ -16,7 +16,7 @@ class SubtitleEnhancer:
         self.api_key = api_key
         genai.configure(api_key=api_key)
         # keep the chosen model; change model name if needed
-        self.model = genai.GenerativeModel("gemini-2.5-flash")
+        self.model = genai.GenerativeModel("gemini-2.0-flash-lite")
         
         # Track total retries across all batches for a task
         self.total_retries_count = {}

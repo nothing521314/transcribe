@@ -1743,7 +1743,7 @@ def validate_api_keys():
                 # Quick validation
                 import google.generativeai as genai
                 genai.configure(api_key=key)
-                model = genai.GenerativeModel("gemini-2.5-flash")
+                model = genai.GenerativeModel("gemini-2.0-flash-lite")
                 
                 # Small test request
                 response = model.generate_content("Hello")
