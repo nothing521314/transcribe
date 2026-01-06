@@ -264,6 +264,7 @@
 								Hỗ trợ YouTube, Vimeo và các nền tảng khác
 							</p>
 						</div>
+						
 					</div>
 				</div>
 			</div>
@@ -271,6 +272,30 @@
 
 		<!-- Language Selection -->
 		<div class="glass-effect rounded-xl p-6 mb-8">
+			<!-- Source Language Selection -->
+			<div class="mb-6 pb-6 border-b border-white/10">
+				<h3 class="text-xl font-bold mb-4">
+					<i class="fas fa-microphone-lines text-blue-400 mr-2"></i>Ngôn ngữ nguồn
+				</h3>
+				<div class="grid md:grid-cols-2 gap-4">
+					<div>
+						<div class="relative">
+							<select x-model="sourceLanguage"
+								class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:border-blue-400 focus:outline-none appearance-none cursor-pointer">
+								<option value="auto" class="bg-gray-900">✨ Tự động phát hiện (Mặc định)</option>
+								<template x-for="[key, lang] in Object.entries(languages)" :key="key">
+									<option :value="lang.code" x-text="`${lang.flag || ''} ${lang.native || lang.name}`" class="bg-gray-900"></option>
+								</template>
+							</select>
+							<div class="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-white/50">
+								<i class="fas fa-chevron-down text-xs"></i>
+							</div>
+						</div>
+						<p class="text-xs text-white/50 mt-2">Chọn ngôn ngữ gốc của video để tăng độ chính xác nhận dạng</p>
+					</div>
+				</div>
+			</div>
+
 			<div class="flex justify-between items-center mb-4">
 				<h3 class="text-xl font-bold">
 					<i class="fas fa-language text-green-400 mr-2"></i>Ngôn ngữ đích
@@ -743,6 +768,7 @@
 					selectedFile: null,
 					videoUrl: "",
 					selectedLanguages: ["vietnamese"],
+					sourceLanguage: "auto",
 					dragOver: false,
 
 					// Options
@@ -1461,6 +1487,7 @@
 							}
 
 							formData.append("api_keys", this.apiKeys.join("\n"));
+							formData.append("source_language", this.sourceLanguage);
 
 							this.selectedLanguages.forEach((lang) => {
 								formData.append("languages", lang);

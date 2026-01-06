@@ -25,7 +25,6 @@ COPY web_app.py video_subtitle_processor.py enhanced_translation_manager.py subt
 COPY shared_state.py __init__.py ./ 
 COPY templates/ templates/
 COPY routes/ routes/
-COPY static/ static/
 COPY gunicorn.conf.py logging.conf ./
 COPY scripts/start-webapp.sh ./
 

@@ -78,8 +78,8 @@ ALLOWED_EXTENSIONS = {
 SUPPORTED_LANGUAGES = {
     "vietnamese": {"code": "vi", "name": "Tiếng Việt", "native": "Tiếng Việt", "flag": "🇻🇳"},
     "english": {"code": "en", "name": "English", "native": "Tiếng Anh", "flag": "🇺🇸"},
-    "chinese": {"code": "zh-cn", "name": "Chinese (Simplified)", "native": "Tiếng Trung (Giản thể)", "flag": "🇨🇳"},
-    "chinese_traditional": {"code": "zh-tw", "name": "Chinese (Traditional)", "native": "Tiếng Trung (Phồn thể)", "flag": "🇹🇼"},
+    "chinese": {"code": "zh", "name": "Chinese (Simplified)", "native": "Tiếng Trung", "flag": "🇨🇳"},
+    # "chinese_traditional": {"code": "zh-tw", "name": "Chinese (Traditional)", "native": "Tiếng Trung (Phồn thể)", "flag": "🇹🇼"},
     "japanese": {"code": "ja", "name": "Japanese", "native": "Tiếng Nhật", "flag": "🇯🇵"},
     "korean": {"code": "ko", "name": "Korean", "native": "Tiếng Hàn", "flag": "🇰🇷"},
     "french": {"code": "fr", "name": "French", "native": "Tiếng Pháp", "flag": "🇫🇷"},
@@ -752,7 +752,7 @@ def process_video_task_enhanced(
             result = processor.model.transcribe(
                 video_path,
                 word_timestamps=True,
-                language="en",
+                language=options.get("source_language"),
                 temperature=0,
                 best_of=3,
                 beam_size=3,
@@ -805,12 +805,24 @@ def process_video_task_enhanced(
 
         # Step 5: Enhanced Translation
         translated_files = {}
-        if target_languages and api_keys:
+        
+        # Filter target languages that match source language
+        source_lang = result.get("language", "en")
+        filtered_target_languages = []
+        if target_languages:
+            for lang in target_languages:
+                lang_info = SUPPORTED_LANGUAGES.get(lang)
+                if lang_info and lang_info.get("code") != source_lang:
+                    filtered_target_languages.append(lang)
+                else:
+                    logger.info(f"Skipping translation for {lang} as it matches source language {source_lang}")
+
+        if filtered_target_languages and api_keys:
             if cancel_flags.get(task_id):
                 raise InterruptedError("Task cancelled before translation")
 
             emit_step_progress(
-                "translation", 0, f"Starting enhanced translation to {len(target_languages)} languages..."
+                "translation", 0, f"Starting enhanced translation to {len(filtered_target_languages)} languages..."
             )
             socketio.sleep(0)
 
@@ -819,7 +831,7 @@ def process_video_task_enhanced(
                 
                 # Use enhanced translation with status updates
                 translated_texts_dict = processor.enhanced_parallel_translate(
-                    texts, target_languages, task_id
+                    texts, filtered_target_languages, task_id
                 )
                 
                 total_langs = len(translated_texts_dict)
@@ -865,7 +877,13 @@ def process_video_task_enhanced(
                     socketio.sleep(0.5)
         else:
             # Skip translation
-            emit_step_progress("translation", 100, "Translation skipped - no API keys provided")
+            msg = "Translation skipped"
+            if not api_keys:
+                msg += " - no API keys provided"
+            elif not filtered_target_languages and target_languages:
+                msg += " - target languages match source language"
+            
+            emit_step_progress("translation", 100, msg)
             socketio.sleep(0)
 
         # Step 6: Completion
@@ -881,8 +899,8 @@ def process_video_task_enhanced(
         files_for_download = []
         files_for_download.append({
             "filename": os.path.relpath(original_srt_path, OUTPUT_FOLDER),
-            "name": "Bản gốc (English)",
-            "flag": "🇺🇸",
+            "name": f"Bản gốc ({result.get('language', 'en')})",
+            "flag": "🌍",
         })
 
         for lang, file_path in translated_files.items():
@@ -1182,19 +1200,34 @@ def process_srt_task_enhanced(
 
         # Step 4: Enhanced Translation
         translated_files = {}
-        if target_languages and api_keys:
+        
+        # Filter target languages based on source_language option
+        source_lang = options.get("source_language")
+        filtered_target_languages = []
+        if target_languages:
+            if source_lang:
+                for lang in target_languages:
+                    lang_info = SUPPORTED_LANGUAGES.get(lang)
+                    if lang_info and lang_info.get("code") != source_lang:
+                        filtered_target_languages.append(lang)
+                    else:
+                        logger.info(f"Skipping translation for {lang} as it matches source language {source_lang}")
+            else:
+                filtered_target_languages = list(target_languages)
+
+        if filtered_target_languages and api_keys:
             if cancel_flags.get(task_id):
                 raise InterruptedError("Task cancelled before translation")
 
             emit_step_progress(
-                "translation", 0, f"Starting translation to {len(target_languages)} languages..."
+                "translation", 0, f"Starting translation to {len(filtered_target_languages)} languages..."
             )
             socketio.sleep(0)
 
             texts = [s["text"] for s in improved_segments]
             try:
                 translated_texts_dict = processor.enhanced_parallel_translate(
-                    texts, target_languages, task_id
+                    texts, filtered_target_languages, task_id
                 )
                 total_langs = len(translated_texts_dict)
                 processed_langs = 0
@@ -1239,7 +1272,12 @@ def process_srt_task_enhanced(
                 emit_step_progress("translation", 100, f"Translation completed with errors: {str(translation_error)}")
                 socketio.sleep(0.5)
         else:
-            emit_step_progress("translation", 100, "Translation skipped - no API keys provided")
+            msg = "Translation skipped"
+            if not api_keys:
+                msg += " - no API keys provided"
+            elif not filtered_target_languages and target_languages:
+                msg += " - target languages match source language"
+            emit_step_progress("translation", 100, msg)
             socketio.sleep(0)
 
         # Step 5: Completion
@@ -1457,11 +1495,18 @@ def upload_file():
 
         # Get other parameters
         target_languages = request.form.getlist("languages")
+        
+        # Handle source language
+        source_language = request.form.get("source_language")
+        if source_language in ["auto", ""]:
+            source_language = None
+            
         options = {
             "max_chars": int(request.form.get("max_chars", 50)),
             "max_duration": float(request.form.get("max_duration", 6.0)),
             "model_size": request.form.get("model_size", "base"),
             "merge_lines": request.form.get("merge_lines", "false").lower() == "true",
+            "source_language": source_language,
         }
 
         video_path = None

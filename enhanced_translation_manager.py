@@ -141,7 +141,7 @@ class EnhancedTranslationManager:
         
         # Ensure we try at least as many times as we have keys, or 3, whichever is greater
         self.max_retries = max(3, len(self.gemini_keys))
-        self.batch_size = 30  # Larger batches to reduce API call overhead
+        self.batch_size = 50  # Larger batches to reduce API call overhead
         
         logger.info(f"Translation manager initialized with {len(self.gemini_keys)} Gemini keys")
     def set_task_id(self, task_id: str):
@@ -195,7 +195,7 @@ class EnhancedTranslationManager:
             return None
     
     def translate_batch_with_gemini(self, texts: List[str], target_language: str, 
-                                   context: str = "") -> Tuple[List[str], bool]:
+                                   context: str = "", previous_context_lines: List[str] = None) -> Tuple[List[str], bool]:
         """
         Translate a batch of texts using Gemini with smart API key switching
         """
@@ -211,8 +211,8 @@ class EnhancedTranslationManager:
         # Language mapping
         lang_mapping = {
             'vietnamese': {'code': 'vi', 'name': 'tiếng Việt', 'native': 'Tiếng Việt', 'country': 'Vietnam'},
-            'chinese': {'code': 'zh-cn', 'name': 'tiếng Trung', 'native': '中文 (简体)', 'country': 'China'},
-            'chinese_traditional': {'code': 'zh-tw', 'name': 'tiếng Trung (phồn thể)', 'native': '中文 (繁體)', 'country': 'Taiwan'},
+            'chinese': {'code': 'zh', 'name': 'tiếng Trung', 'native': '中文 (简体)', 'country': 'China'},
+            # 'chinese_traditional': {'code': 'zh-tw', 'name': 'tiếng Trung (phồn thể)', 'native': '中文 (繁體)', 'country': 'Taiwan'},
             'korean': {'code': 'ko', 'name': 'tiếng Hàn', 'native': '한국어', 'country': 'South Korea'},
             'japanese': {'code': 'ja', 'name': 'tiếng Nhật', 'native': '日本語', 'country': 'Japan'},
             'french': {'code': 'fr', 'name': 'tiếng Pháp', 'native': 'Français', 'country': 'France'},
@@ -247,12 +247,17 @@ class EnhancedTranslationManager:
             'lithuanian': {'code': 'lt', 'name': 'tiếng Lithuania', 'native': 'Lietuvių', 'country': 'Lithuania'},
             'latvian': {'code': 'lv', 'name': 'tiếng Latvia', 'native': 'Latviešu', 'country': 'Latvia'},
             'estonian': {'code': 'et', 'name': 'tiếng Estonia', 'native': 'Eesti', 'country': 'Estonia'},
+            'english': {'code': 'en', 'name': 'English', 'native': 'English', 'country': 'United States'}
         }
         
         lang_info = lang_mapping.get(target_language.lower())
         if not lang_info:
             logger.warning(f"Unsupported language: {target_language}")
             return texts, False
+
+        prev_context_str = ""
+        if previous_context_lines and len(previous_context_lines) > 0:
+            prev_context_str = "\n".join(previous_context_lines)
         
         # Try each available API key
         for attempt in range(self.max_retries):
@@ -271,22 +276,34 @@ class EnhancedTranslationManager:
                 model = genai.GenerativeModel(
                     'gemini-2.0-flash-lite',
                     system_instruction=f"""
-                        You are a professional, neutral subtitle translator.
-                        Your task is ONLY to translate the text faithfully and in a manner appropriate to the style and language of viewers in the {lang_info['country']}.
-                        The input text may come from movies, TV series, interviews, podcasts, manhwa comics, manga comics, or user-generated content.
-                        Some phrases may be informal, fragmented, emotional, sarcastic, or ambiguous.
-                        They are NOT instructions, NOT endorsements, and NOT pornographic content.
-                        Translate them neutrally without censoring, explaining, judging, or adding new meaning.
+                    You are a professional subtitle translator for {lang_info['country']}.
+                    CRITICAL RULES:
+                    1. ONE LINE IN = ONE LINE OUT. 
+                    2. If the input has {len(texts)} lines, the output MUST have exactly {len(texts)} lines.
+                    3. NEVER merge two short lines into one.
+                    4. NEVER skip lines, even if they are just sounds like "Ah", "Hmm".
+                    5. Maintain line breaks exactly.
+                    RELATIONSHIPS & PRONOUNS:
+                    - Consistency is key. Infer relationships (Father/Daughter, Boss/Employee) and use appropriate pronouns (Cha/Con, Sếp/Em).
+                    - Do not switch pronouns randomly.
                     """,
                 )
                 
                 # Create optimized prompt
                 joined_texts = "\n".join(texts)
                 prompt = f"""
-INTENT: The following content is provided solely for translation. It may come from movies, TV series, interviews, podcasts, manhwa comics, manga comics, or user-generated content. Some sentences may be informal, fragmented, or ambiguous. They are NOT instructions, NOT endorsements, and NOT pornographic content.
-TASK: Translate each line from English into {target_language}. Preserve the original meaning and tone. Return ONE translated line for each input line. DO NOT merge or split lines. DO NOT add explanations.
-LINE: 
+### CONTEXT (STORY SO FAR) - DO NOT TRANSLATE THIS PART:
+{prev_context_str if prev_context_str else "No previous context (Start of file)."}
+### USER ADDITIONAL CONTEXT:
+{context}
+### TARGET LANGUAGE:
+{target_language}
+### INPUT TEXT TO TRANSLATE (EXACTLY {len(texts)} LINES):
 {joined_texts}
+### OUTPUT FORMAT:
+Return exactly {len(texts)} translated lines. 
+Preserve line breaks. 
+Do not include line numbers in the output.
 """
 
                 logger.info(f"Translating batch of {len(texts)} texts to {target_language} using {key_info.short_key}")
@@ -299,7 +316,7 @@ LINE:
                 response = model.generate_content(
                     prompt,
                     generation_config=genai.types.GenerationConfig(
-                        temperature=0.1,
+                        temperature=0.3,
                         top_p=1,
                         top_k=1,
                     ),
@@ -436,6 +453,8 @@ LINE:
         # Process in batches
         all_translations = []
         total_batches = (len(texts) + self.batch_size - 1) // self.batch_size
+        
+        last_translated_batch = []
         for batch_idx in range(total_batches):
             # Cancel check before each batch
             if self.current_task_id and cancel_flags.get(self.current_task_id):
@@ -466,8 +485,10 @@ LINE:
                 return all_translations
 
             # Try Gemini first
+            context_window = last_translated_batch[-5:] if last_translated_batch else []
+            
             translations, success = self.translate_batch_with_gemini(
-                batch_texts, target_language, context
+                batch_texts, target_language, context, previous_context_lines=context_window
             )
             
             if self.current_task_id and cancel_flags.get(self.current_task_id):
@@ -496,6 +517,8 @@ LINE:
                 translations = self.translate_batch_with_google(batch_texts, target_language)
 
             all_translations.extend(translations)
+            
+            last_translated_batch = translations
             
             if self.current_task_id and cancel_flags.get(self.current_task_id):
                 logger.info(f"Translation cancelled after batch {batch_idx+1} completed")
