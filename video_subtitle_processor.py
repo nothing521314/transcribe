@@ -414,7 +414,8 @@ class VideoSubtitleProcessor:
         current = segments[0]
         
         # Treat 0 as unlimited for merging purposes
-        limit = float('inf') if max_chars <= 0 else max_chars
+        # limit = float('inf') if max_chars <= 0 else max_chars
+        limit = 1000 if max_chars <= 0 else max_chars
         
         for next_seg in segments[1:]:
             text = current['text'].strip()

@@ -168,7 +168,7 @@ class EnhancedTranslationManager:
                 import eventlet
                 eventlet.sleep(0)
                 
-                logger.info(f"📡 Translation progress: {step} - {progress*100:.0f}% - {message}")
+                # logger.info(f"📡 Translation progress: {step} - {progress*100:.0f}% - {message}")
             except Exception as e:
                 logger.warning(f"⚠️ Failed to emit translation progress: {e}")
 
@@ -306,8 +306,8 @@ Preserve line breaks.
 Do not include line numbers in the output.
 """
 
-                logger.info(f"Translating batch of {len(texts)} texts to {target_language} using {key_info.short_key}")
-                logger.info(f"Prompt length: {len(prompt)} characters, {prompt}")
+                # logger.info(f"Translating batch of {len(texts)} texts to {target_language} using {key_info.short_key}")
+                # logger.info(f"Prompt length: {len(prompt)} characters, {prompt}")
                 
                 if self.current_task_id and cancel_flags.get(self.current_task_id):
                     logger.info("Cancelled before Gemini API call")
@@ -343,7 +343,7 @@ Do not include line numbers in the output.
                 valid_translations = [t for t in translations if t.strip()]
                 if len(valid_translations) >= len(texts) * 0.7:  # At least 70% valid
                     key_info.mark_success()
-                    logger.info(f"Successfully translated {len(valid_translations)}/{len(texts)} using {key_info.short_key}")
+                    # logger.info(f"Successfully translated {len(valid_translations)}/{len(texts)} using {key_info.short_key}")
                     
                     # Fill empty translations with originals
                     final_translations = []
@@ -404,7 +404,7 @@ Do not include line numbers in the output.
         
         target_code = lang_codes.get(target_language.lower(), 'vi')
         
-        logger.info(f"Using Google Translate fallback for {len(texts)} texts to {target_language}")
+        # logger.info(f"Using Google Translate fallback for {len(texts)} texts to {target_language}")
         
         translations = []
         for i, text in enumerate(texts):

@@ -49,8 +49,8 @@ app.secret_key = os.environ.get("SECRET_KEY", "your-secret-key-change-this")
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    logger=True,
-    engineio_logger=True,
+    logger=False,
+    engineio_logger=False,
     async_mode="eventlet",
     ping_timeout=300,
     ping_interval=25,
